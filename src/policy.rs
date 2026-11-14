@@ -34,9 +34,10 @@ pub(crate) fn valid_path(path: &str) -> bool {
     path.starts_with('/')
         && path.len() <= 2048
         && !path.contains("//")
-        && !path.split('/').any(|segment| segment == "." || segment == "..")
-        && path
-            .bytes()
-            .all(|byte| (0x21..=0x7e).contains(&byte) && !matches!(byte, b'?' | b'#' | b'\\' | b'%'))
+        && !path
+            .split('/')
+            .any(|segment| segment == "." || segment == "..")
+        && path.bytes().all(|byte| {
+            (0x21..=0x7e).contains(&byte) && !matches!(byte, b'?' | b'#' | b'\\' | b'%')
+        })
 }
-

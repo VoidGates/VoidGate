@@ -81,7 +81,10 @@ async fn decide_http(
         Decision::Allow => ("allow", "no_matching_rule"),
     };
 
-    Ok(Json(HttpDecisionResponse { action, reason_code }))
+    Ok(Json(HttpDecisionResponse {
+        action,
+        reason_code,
+    }))
 }
 
 fn valid_method(method: &str) -> bool {
@@ -102,7 +105,10 @@ mod tests {
     use super::{app, AppState};
 
     fn test_app() -> axum::Router {
-        app(AppState::new("a".repeat(32), vec!["/internal/backup".into()]).expect("valid test config"))
+        app(
+            AppState::new("a".repeat(32), vec!["/internal/backup".into()])
+                .expect("valid test config"),
+        )
     }
 
     async fn decision(body: &str, key: Option<&str>) -> (StatusCode, String) {
@@ -113,17 +119,29 @@ mod tests {
         if let Some(key) = key {
             request = request.header("x-voidgate-key", key);
         }
-        let request = request.body(Body::from(body.to_owned())).expect("valid request");
+        let request = request
+            .body(Body::from(body.to_owned()))
+            .expect("valid request");
         let response = test_app().oneshot(request).await.expect("router response");
         let status = response.status();
-        let body = to_bytes(response.into_body(), 4096).await.expect("response body");
-        (status, String::from_utf8(body.to_vec()).expect("utf8 response"))
+        let body = to_bytes(response.into_body(), 4096)
+            .await
+            .expect("response body");
+        (
+            status,
+            String::from_utf8(body.to_vec()).expect("utf8 response"),
+        )
     }
 
     #[tokio::test]
     async fn health_is_public() {
         let response = test_app()
-            .oneshot(Request::builder().uri("/health").body(Body::empty()).expect("request"))
+            .oneshot(
+                Request::builder()
+                    .uri("/health")
+                    .body(Body::empty())
+                    .expect("request"),
+            )
             .await
             .expect("response");
         assert_eq!(response.status(), StatusCode::OK);
@@ -131,14 +149,21 @@ mod tests {
 
     #[tokio::test]
     async fn authentication_precedes_json_parsing() {
-        assert_eq!(decision("invalid json", None).await.0, StatusCode::UNAUTHORIZED);
-        assert_eq!(decision("invalid json", Some(&"b".repeat(32))).await.0, StatusCode::UNAUTHORIZED);
+        assert_eq!(
+            decision("invalid json", None).await.0,
+            StatusCode::UNAUTHORIZED
+        );
+        assert_eq!(
+            decision("invalid json", Some(&"b".repeat(32))).await.0,
+            StatusCode::UNAUTHORIZED
+        );
     }
 
     #[tokio::test]
     async fn exact_path_decides_and_invalid_path_is_rejected() {
         let key = "a".repeat(32);
-        let (status, body) = decision(r#"{"method":"GET","path":"/internal/backup"}"#, Some(&key)).await;
+        let (status, body) =
+            decision(r#"{"method":"GET","path":"/internal/backup"}"#, Some(&key)).await;
         assert_eq!(status, StatusCode::OK);
         assert!(body.contains("\"action\":\"decoy\""));
 
@@ -146,7 +171,12 @@ mod tests {
         assert_eq!(status, StatusCode::OK);
         assert!(body.contains("\"action\":\"allow\""));
 
-        for path in ["relative", "/internal/%62ackup", "/internal//backup", "/a/../backup"] {
+        for path in [
+            "relative",
+            "/internal/%62ackup",
+            "/internal//backup",
+            "/a/../backup",
+        ] {
             let body = format!(r#"{{"method":"GET","path":"{path}"}}"#);
             assert_eq!(decision(&body, Some(&key)).await.0, StatusCode::BAD_REQUEST);
         }
@@ -155,7 +185,10 @@ mod tests {
     #[tokio::test]
     async fn rejects_oversized_body() {
         let body = "x".repeat(4097);
-        assert_eq!(decision(&body, Some(&"a".repeat(32))).await.0, StatusCode::PAYLOAD_TOO_LARGE);
+        assert_eq!(
+            decision(&body, Some(&"a".repeat(32))).await.0,
+            StatusCode::PAYLOAD_TOO_LARGE
+        );
     }
 
     #[test]
@@ -164,4 +197,3 @@ mod tests {
         assert!(AppState::new("a".repeat(32), vec!["relative".into()]).is_err());
     }
 }
-

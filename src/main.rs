@@ -29,4 +29,3 @@ fn optional_env(name: &'static str) -> Result<Option<String>, env::VarError> {
         Err(error) => Err(error),
     }
 }
-

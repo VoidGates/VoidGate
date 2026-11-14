@@ -34,9 +34,11 @@ pub(crate) async fn authorize(
     request: Request,
     next: Next,
 ) -> Result<Response, StatusCode> {
-    if !state.key_verifier.verify(request.headers().get("x-voidgate-key")) {
+    if !state
+        .key_verifier
+        .verify(request.headers().get("x-voidgate-key"))
+    {
         return Err(StatusCode::UNAUTHORIZED);
     }
     Ok(next.run(request).await)
 }
-

@@ -1,0 +1,15 @@
+name: Generate Cargo lockfile for review
+on:
+  push:
+    branches: [docs/rust-readme-lockfile]
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - run: |
+          cargo generate-lockfile
+          echo CARGO_LOCK_BEGIN
+          cat Cargo.lock
+          echo CARGO_LOCK_END

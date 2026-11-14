@@ -15,7 +15,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let state = AppState::new(api_key, paths)?;
 
     let address: SocketAddr = optional_env("VOIDGATE_BIND")?
-        .unwrap_or_else(|_| "127.0.0.1:8080".into())
+        .unwrap_or_else(|| "127.0.0.1:8080".into())
         .parse()?;
     let listener = tokio::net::TcpListener::bind(address).await?;
     axum::serve(listener, app(state)).await?;

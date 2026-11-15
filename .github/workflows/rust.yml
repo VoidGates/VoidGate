@@ -3,6 +3,7 @@ name: Rust
 on:
   pull_request:
   push:
+  merge_group:
 
 jobs:
   verify:

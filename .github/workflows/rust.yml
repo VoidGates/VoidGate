@@ -3,6 +3,9 @@ name: Rust
 on:
   pull_request:
   push:
+    # a fila ja roda por merge_group; evita rodar 2x nas branches temporarias
+    branches-ignore:
+      - "gh-readonly-queue/**"
   merge_group:
 
 jobs:

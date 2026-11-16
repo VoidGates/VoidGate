@@ -1,4 +1,6 @@
 mod auth;
+mod chat;
+mod detectors;
 mod policy;
 
 use std::sync::Arc;
@@ -13,6 +15,7 @@ use axum::{
 use serde::{Deserialize, Serialize};
 
 use auth::{authorize, ApiKeyVerifier};
+use detectors::Detector;
 use policy::{valid_path, Decision, ExactPathPolicy};
 
 const MAX_BODY_BYTES: usize = 4096;
@@ -21,6 +24,7 @@ const MAX_BODY_BYTES: usize = 4096;
 pub struct AppState {
     key_verifier: ApiKeyVerifier,
     policy: Arc<ExactPathPolicy>,
+    detectors: Arc<Vec<Box<dyn Detector>>>,
 }
 
 impl AppState {
@@ -28,6 +32,7 @@ impl AppState {
         Ok(Self {
             key_verifier: ApiKeyVerifier::new(&api_key)?,
             policy: Arc::new(ExactPathPolicy::new(decoy_paths)?),
+            detectors: Arc::new(detectors::default_detectors()),
         })
     }
 }
@@ -35,6 +40,10 @@ impl AppState {
 pub fn app(state: AppState) -> Router {
     let decisions = Router::new()
         .route("/v1/decisions/http", post(decide_http))
+        .route(
+            "/v1/decisions/chat",
+            post(chat::decide_chat).layer(DefaultBodyLimit::max(chat::MAX_BODY_BYTES)),
+        )
         .route_layer(middleware::from_fn_with_state(state.clone(), authorize));
 
     Router::new()

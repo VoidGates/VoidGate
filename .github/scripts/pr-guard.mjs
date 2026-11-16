@@ -45,9 +45,16 @@ export function scan(diff) {
   let file = null
   let line = 0
   let prev = ''
+  let inHunk = false
   for (const raw of diff.split('\n')) {
-    // an added line "++ x" also renders as "+++ x"; a real header always follows "--- "
-    const isHeader = raw.startsWith('+++ ') && prev.startsWith('--- ')
+    if (raw.startsWith('diff --git ')) {
+      file = null
+      prev = ''
+      inHunk = false
+      continue
+    }
+    // Header-like additions inside a hunk are content, even after a removed "-- x" line.
+    const isHeader = !inHunk && raw.startsWith('+++ ') && prev.startsWith('--- ')
     prev = raw
     if (isHeader) {
       file = raw === '+++ /dev/null' ? null : raw.slice(6)
@@ -55,7 +62,7 @@ export function scan(diff) {
       continue
     }
     const hunk = raw.match(/^@@ -\d+(?:,\d+)? \+(\d+)/)
-    if (hunk) { line = Number(hunk[1]); continue }
+    if (hunk) { line = Number(hunk[1]); inHunk = true; continue }
     const bin = raw.match(/^Binary files .* and b\/(.+) differ$/)
     if (bin) { findings.push({ level: 'warn', name: 'Arquivo binário', file: bin[1], line: 0 }); continue }
     if (!file || raw.startsWith('---')) continue

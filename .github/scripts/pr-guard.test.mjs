@@ -40,6 +40,20 @@ test('linha adicionada "++ x" não troca o arquivo atual', () => {
   assert.ok(r.some(f => f.name === 'Hook de instalação npm' && f.file === 'package.json'))
 })
 
+test('par removido/adicionado com cara de cabeçalho não troca o arquivo', () => {
+  const crafted = [
+    'diff --git a/Cargo.toml b/Cargo.toml',
+    '--- a/Cargo.toml',
+    '+++ b/Cargo.toml',
+    '@@ -1,2 +1,3 @@',
+    '--- b/src/benign.rs',
+    '+++ b/src/benign.rs',
+    '+dependency = { git = "https://example.invalid/repo" }',
+  ].join('\n')
+  const findings = scan(crafted)
+  assert.ok(findings.some(f => f.level === 'block' && f.file === 'Cargo.toml' && f.name === 'Dependência Rust fora do crates.io'))
+})
+
 test('aponta a linha correta', () => {
   const [f] = scan(diff('src/a.ts', 'ok', 'const t = "ghp_' + 'a'.repeat(36) + '"'))
   assert.equal(f.line, 11)

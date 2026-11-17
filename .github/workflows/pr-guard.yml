@@ -45,7 +45,7 @@ jobs:
           fi
           set -o pipefail
           set +e
-          git diff --unified=0 --no-color "$BASE...$HEAD" | node .github/scripts/pr-guard.mjs > report.md
+          git -c core.quotePath=false diff --no-renames --unified=0 --no-color "$BASE...$HEAD" | node .github/scripts/pr-guard.mjs > report.md
           status=$?
           set -e
           cat report.md

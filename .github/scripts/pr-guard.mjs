@@ -3,6 +3,9 @@
 import { readFileSync, appendFileSync } from 'node:fs'
 import { fileURLToPath } from 'node:url'
 
+// Matches any added line: for files whose mere presence in a PR is the problem.
+const ANY = /\S/
+
 const RULES = [
   // block: almost never legitimate in this repo
   { level: 'block', name: 'Chave privada', re: /-----BEGIN [A-Z ]*PRIVATE KEY-----/ },
@@ -17,14 +20,16 @@ const RULES = [
   { level: 'block', name: 'Pacote baixado fora do registry npm', file: /(^|\/)package-lock\.json$/, re: /"resolved":\s*"(?!https:\/\/registry\.npmjs\.org\/)/ },
   { level: 'block', name: 'Troca de registry npm', file: /(^|\/)\.npmrc$/, re: /registry\s*=/ },
   // Rust: build.rs roda código na máquina de quem compila, igual a um postinstall
-  { level: 'block', name: 'build.rs do Cargo (executa código ao compilar)', file: /(^|\/)build\.rs$/, re: /\S/ },
-  { level: 'block', name: 'Build script declarado no Cargo.toml', file: /(^|\/)Cargo\.toml$/, re: /^\s*build\s*=/ },
-  { level: 'block', name: 'Dependência Rust fora do crates.io', file: /(^|\/)Cargo\.toml$/, re: /\b(git|registry)\s*=/ },
+  { level: 'block', name: 'build.rs do Cargo (executa código ao compilar)', file: /(^|\/)build\.rs$/, re: ANY },
+  { level: 'block', name: 'Build script declarado no Cargo.toml', file: /(^|\/)Cargo\.toml$/, re: /^\s*(package\s*\.\s*)?["']?build["']?\s*=/ },
+  { level: 'block', name: 'Dependência Rust fora do crates.io', file: /(^|\/)Cargo\.toml$/, re: /(^|[\s{,.])["']?(git|registry)["']?\s*=/ },
+  { level: 'block', name: 'Seção [patch]/[replace] no Cargo.toml (troca a origem de um crate)', file: /(^|\/)Cargo\.toml$/, re: /^\s*\[\s*(patch|replace)\b/ },
   { level: 'block', name: 'Crate baixado fora do crates.io', file: /(^|\/)Cargo\.lock$/, re: /^source\s*=\s*"(?!registry\+https:\/\/github\.com\/rust-lang\/crates\.io-index")/ },
-  { level: 'block', name: 'Configuração do Cargo alterada (registry/fonte)', file: /(^|\/)\.cargo\/config(\.toml)?$/, re: /\S/ },
+  { level: 'block', name: 'Configuração do Cargo alterada (registry/fonte)', file: /(^|\/)\.cargo\/config(\.toml)?$/, re: ANY },
   // warn: legitimate sometimes, needs a human look
   { level: 'warn', name: 'eval / new Function', re: /\beval\s*\(|\bnew Function\s*\(/ },
   { level: 'warn', name: 'child_process', re: /child_process/ },
+  { level: 'warn', name: 'Caminho local no Cargo.toml (dependência ou alvo fora do padrão)', file: /(^|\/)Cargo\.toml$/, re: /(^|[\s{,.])["']?path["']?\s*=/ },
   { level: 'warn', name: 'Executa processo externo (Rust)', re: /\bCommand::new\s*\(/ },
   { level: 'warn', name: 'Bloco unsafe (Rust)', re: /\bunsafe\s*(\{|fn\b|impl\b)/ },
   { level: 'warn', name: 'Blob base64/hex longo (possível payload ofuscado)', re: /[A-Za-z0-9+/=]{200,}|(\\x[0-9a-f]{2}){30,}/i },
@@ -38,6 +43,21 @@ const SENSITIVE_PATHS = [
   [/(^|\/)Cargo\.toml$/, 'Altera dependências Rust'],
   [/(^|\/)vite\.config\.[jt]s$/, 'Altera a configuração do build'],
 ]
+
+// Git prints paths with special or non-ASCII characters as a quoted C string
+// ("b/\303\251/x"); left as is, no file rule would ever match them.
+function unquote(path) {
+  if (!path.startsWith('"')) return path
+  const text = path.slice(1, path.endsWith('"') ? -1 : undefined)
+  const bytes = []
+  for (let i = 0; i < text.length; i++) {
+    const octal = text.slice(i + 1, i + 4)
+    if (text[i] !== '\\') bytes.push(...Buffer.from(text[i]))
+    else if (/^[0-7]{3}$/.test(octal)) { bytes.push(parseInt(octal, 8)); i += 3 }
+    else { i++; bytes.push(...Buffer.from({ n: '\n', t: '\t' }[text[i]] ?? text[i] ?? '')) }
+  }
+  return Buffer.from(bytes).toString('utf8')
+}
 
 export function scan(diff) {
   const findings = []
@@ -57,8 +77,19 @@ export function scan(diff) {
     const isHeader = !inHunk && raw.startsWith('+++ ') && prev.startsWith('--- ')
     prev = raw
     if (isHeader) {
-      file = raw === '+++ /dev/null' ? null : raw.slice(6)
+      const path = unquote(raw.slice(4))
+      file = path === '/dev/null' ? null : path.slice(2)
       if (file) files.add(file)
+      continue
+    }
+    // A pure rename or copy has no added lines, so content rules never run on
+    // it: moving an existing file to build.rs would pass unnoticed.
+    const moved = !inHunk && raw.match(/^(?:rename|copy) to (.+)$/)
+    if (moved) {
+      file = unquote(moved[1])
+      files.add(file)
+      for (const r of RULES)
+        if (r.re === ANY && r.file.test(file)) findings.push({ level: r.level, name: r.name, file, line: 0 })
       continue
     }
     const hunk = raw.match(/^@@ -\d+(?:,\d+)? \+(\d+)/)

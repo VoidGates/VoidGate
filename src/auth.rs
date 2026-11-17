@@ -1,13 +1,13 @@
 use axum::{
     extract::{Request, State},
-    http::{HeaderValue, StatusCode},
+    http::HeaderValue,
     middleware::Next,
     response::Response,
 };
 use sha2::{Digest, Sha256};
 use subtle::ConstantTimeEq;
 
-use crate::AppState;
+use crate::{error::AppError, AppState};
 
 #[derive(Clone, Copy, Hash, PartialEq, Eq)]
 pub(crate) struct ClientKey([u8; 32]);
@@ -26,6 +26,12 @@ impl ApiKeyVerifier {
     pub(crate) fn new(api_key: &str) -> Result<Self, String> {
         if !(32..=128).contains(&api_key.len()) {
             return Err("VOIDGATE_API_KEY must contain 32 to 128 bytes".into());
+        }
+        // A key no header can carry would start a service that rejects everyone.
+        if api_key != api_key.trim() || HeaderValue::from_str(api_key).is_err() {
+            return Err(
+                "VOIDGATE_API_KEY must not contain control characters or surrounding spaces".into(),
+            );
         }
         Ok(Self(Sha256::digest(api_key.as_bytes()).into()))
     }
@@ -47,7 +53,7 @@ pub(crate) async fn authorize(
     State(state): State<AppState>,
     mut request: Request,
     next: Next,
-) -> Result<Response, StatusCode> {
+) -> Result<Response, AppError> {
     if !state
         .key_verifier
         .verify(request.headers().get("x-voidgate-key"))
@@ -56,7 +62,7 @@ pub(crate) async fn authorize(
             .metrics
             .auth_rejections
             .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-        return Err(StatusCode::UNAUTHORIZED);
+        return Err(AppError::Unauthorized);
     }
     request
         .extensions_mut()

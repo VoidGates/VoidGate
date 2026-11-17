@@ -1,0 +1,626 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "VoidGate backend",
+    "version": "0.1.0",
+    "description": "API de decisão do VoidGate. Clique em **Authorize** e informe o valor de `VOIDGATE_API_KEY`.\n\nAs respostas são para o gateway que integra a API. Nunca repasse `reason_code`, `reason_codes`, `findings` ou o corpo de um erro ao cliente final.\n\nAs rotas de decisão têm limite por credencial (`429` com `Retry-After`), no máximo 256 decisões simultâneas (`503`) e 5 segundos por decisão, contando a chegada do corpo (`504`)."
+  },
+  "tags": [
+    {
+      "name": "Saúde",
+      "description": "Rotas públicas de verificação do processo."
+    },
+    {
+      "name": "Decisões",
+      "description": "Rotas autenticadas com `x-voidgate-key`."
+    },
+    {
+      "name": "Operação",
+      "description": "Rotas autenticadas para quem opera o serviço."
+    }
+  ],
+  "paths": {
+    "/health": {
+      "get": {
+        "tags": [
+          "Saúde"
+        ],
+        "summary": "Processo no ar",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Health"
+          }
+        }
+      }
+    },
+    "/live": {
+      "get": {
+        "tags": [
+          "Saúde"
+        ],
+        "summary": "Liveness",
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Health"
+          }
+        }
+      }
+    },
+    "/ready": {
+      "get": {
+        "tags": [
+          "Saúde"
+        ],
+        "summary": "Readiness: o limitador em memória está utilizável",
+        "responses": {
+          "200": {
+            "description": "Pronto para decidir",
+            "content": {
+              "application/json": {
+                "example": {
+                  "status": "ready"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Limitador indisponível",
+            "content": {
+              "application/json": {
+                "example": {
+                  "status": "not_ready"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/metrics": {
+      "get": {
+        "tags": [
+          "Operação"
+        ],
+        "summary": "Contadores agregados no formato Prometheus",
+        "description": "Só contadores: sem conteúdo, caminhos ou credenciais. Não consome o limite de decisões.",
+        "security": [
+          {
+            "ApiKey": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Métricas em texto",
+            "content": {
+              "text/plain": {
+                "example": "voidgate_authenticated_decisions_total 12\n"
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          }
+        }
+      }
+    },
+    "/v1/decisions/http": {
+      "post": {
+        "tags": [
+          "Decisões"
+        ],
+        "summary": "Decide se um caminho HTTP vai para a isca",
+        "description": "Corpo limitado a 4 KiB.",
+        "security": [
+          {
+            "ApiKey": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/HttpDecisionRequest"
+              },
+              "example": {
+                "method": "GET",
+                "path": "/internal/backup"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Decisão",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HttpDecisionResponse"
+                },
+                "examples": {
+                  "isca": {
+                    "value": {
+                      "action": "decoy",
+                      "reason_code": "registered_decoy_path"
+                    }
+                  },
+                  "livre": {
+                    "value": {
+                      "action": "allow",
+                      "reason_code": "no_matching_rule"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "504": {
+            "$ref": "#/components/responses/DecisionTimeout"
+          }
+        }
+      }
+    },
+    "/v1/decisions/chat": {
+      "post": {
+        "tags": [
+          "Decisões"
+        ],
+        "summary": "Decide se uma mensagem de chat pode seguir",
+        "description": "Corpo limitado a 100 KiB e `content` a 16 KiB em UTF-8. O conteúdo nunca aparece na resposta; `start` e `end` são offsets em bytes (fim exclusivo). Caracteres ocultos seguidos formam um único item em `findings`. A lista traz no máximo 100 itens; `truncated` indica que havia mais.",
+        "security": [
+          {
+            "ApiKey": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatDecisionRequest"
+              },
+              "example": {
+                "role": "user",
+                "content": "Olá, tudo bem?"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Decisão",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatDecisionResponse"
+                },
+                "examples": {
+                  "livre": {
+                    "value": {
+                      "action": "allow",
+                      "reason_codes": [],
+                      "findings": [],
+                      "truncated": false
+                    }
+                  },
+                  "bloqueada": {
+                    "value": {
+                      "action": "block",
+                      "reason_codes": [
+                        "content.invisible_unicode"
+                      ],
+                      "findings": [
+                        {
+                          "code": "content.invisible_unicode",
+                          "detector": "invisible_unicode",
+                          "start": 5,
+                          "end": 8
+                        }
+                      ],
+                      "truncated": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "504": {
+            "$ref": "#/components/responses/DecisionTimeout"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "ApiKey": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "x-voidgate-key"
+      }
+    },
+    "schemas": {
+      "HttpDecisionRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "method",
+          "path"
+        ],
+        "properties": {
+          "method": {
+            "type": "string",
+            "enum": [
+              "GET",
+              "HEAD",
+              "POST",
+              "PUT",
+              "PATCH",
+              "DELETE",
+              "OPTIONS"
+            ]
+          },
+          "path": {
+            "type": "string",
+            "maxLength": 2048,
+            "pattern": "^/[!-~]*$",
+            "description": "Caminho absoluto de até 2048 bytes, só com caracteres ASCII visíveis. Não pode conter `?`, `#`, `%`, `\\`, `//` nem segmentos `.` ou `..`. Normalize e decodifique o caminho antes de perguntar: a comparação com as iscas é exata."
+          }
+        }
+      },
+      "HttpDecisionResponse": {
+        "type": "object",
+        "required": [
+          "action",
+          "reason_code"
+        ],
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "allow",
+              "decoy"
+            ]
+          },
+          "reason_code": {
+            "type": "string",
+            "enum": [
+              "no_matching_rule",
+              "registered_decoy_path"
+            ]
+          }
+        }
+      },
+      "ChatDecisionRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "role",
+          "content"
+        ],
+        "properties": {
+          "role": {
+            "type": "string",
+            "enum": [
+              "user",
+              "system",
+              "assistant"
+            ]
+          },
+          "content": {
+            "type": "string",
+            "description": "Texto de até 16 KiB (16384 bytes em UTF-8)."
+          }
+        }
+      },
+      "ChatDecisionResponse": {
+        "type": "object",
+        "required": [
+          "action",
+          "reason_codes",
+          "findings",
+          "truncated"
+        ],
+        "properties": {
+          "action": {
+            "type": "string",
+            "enum": [
+              "allow",
+              "block"
+            ]
+          },
+          "reason_codes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "content.invisible_unicode"
+              ]
+            }
+          },
+          "findings": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "code",
+                "detector",
+                "start",
+                "end"
+              ],
+              "properties": {
+                "code": {
+                  "type": "string"
+                },
+                "detector": {
+                  "type": "string"
+                },
+                "start": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "end": {
+                  "type": "integer",
+                  "minimum": 0
+                }
+              }
+            },
+            "maxItems": 100
+          },
+          "truncated": {
+            "type": "boolean",
+            "description": "`true` quando havia mais de 100 ocorrências; a decisão considera todas."
+          }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "required": [
+          "error"
+        ],
+        "properties": {
+          "error": {
+            "type": "object",
+            "required": [
+              "code",
+              "message"
+            ],
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "unauthorized",
+                  "not_found",
+                  "method_not_allowed",
+                  "invalid_json",
+                  "invalid_body",
+                  "payload_too_large",
+                  "unsupported_media_type",
+                  "rate_limited",
+                  "unavailable",
+                  "decision_timeout"
+                ]
+              },
+              "message": {
+                "type": "string"
+              }
+            }
+          }
+        }
+      }
+    },
+    "responses": {
+      "Health": {
+        "description": "Processo no ar",
+        "content": {
+          "application/json": {
+            "example": {
+              "status": "ok"
+            }
+          }
+        }
+      },
+      "BadRequest": {
+        "description": "`invalid_json` (JSON malformado) ou `invalid_body` (campo ausente, extra ou com valor fora do contrato)",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "error": {
+                "code": "invalid_body",
+                "message": "Request body does not match the documented contract."
+              }
+            }
+          }
+        }
+      },
+      "Unauthorized": {
+        "description": "Chave ausente ou inválida. Sem chave válida, esta é a resposta de qualquer rota fora as de saúde.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "error": {
+                "code": "unauthorized",
+                "message": "Missing or invalid credentials."
+              }
+            }
+          }
+        }
+      },
+      "PayloadTooLarge": {
+        "description": "Corpo ou `content` acima do limite",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "error": {
+                "code": "payload_too_large",
+                "message": "Request exceeds the documented size limit."
+              }
+            }
+          }
+        }
+      },
+      "UnsupportedMediaType": {
+        "description": "Sem `Content-Type: application/json`",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "error": {
+                "code": "unsupported_media_type",
+                "message": "Content-Type must be application/json."
+              }
+            }
+          }
+        }
+      },
+      "NotFound": {
+        "description": "Rota desconhecida. Só aparece com chave válida.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "error": {
+                "code": "not_found",
+                "message": "Unknown route."
+              }
+            }
+          }
+        }
+      },
+      "MethodNotAllowed": {
+        "description": "Método não aceito pela rota. Só aparece com chave válida.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "error": {
+                "code": "method_not_allowed",
+                "message": "Method not supported for this route."
+              }
+            }
+          }
+        }
+      },
+      "RateLimited": {
+        "description": "Limite de pedidos por minuto excedido para a credencial.",
+        "headers": {
+          "Retry-After": {
+            "description": "Segundos até poder tentar de novo.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        },
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "error": {
+                "code": "rate_limited",
+                "message": "Too many requests."
+              }
+            }
+          }
+        }
+      },
+      "Unavailable": {
+        "description": "Já há 256 decisões em andamento, ou o limitador em memória está indisponível.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "error": {
+                "code": "unavailable",
+                "message": "Service is temporarily unavailable."
+              }
+            }
+          }
+        }
+      },
+      "DecisionTimeout": {
+        "description": "A decisão passou de 5 segundos, contando o tempo de chegada do corpo.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "error": {
+                "code": "decision_timeout",
+                "message": "Request took too long to arrive or to be decided."
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

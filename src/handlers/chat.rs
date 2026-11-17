@@ -3,106 +3,25 @@
 //! The message content is inspected in memory and discarded. It is never
 //! echoed in the response, stored, or logged; only byte offsets are reported.
 
-use axum::{
-    extract::{rejection::JsonRejection, State},
-    http::StatusCode,
-    Json,
-};
-use serde::{Deserialize, Serialize};
+use axum::{extract::State, Json};
 
 use crate::{
-    detectors::{Detector, Finding},
-    AppState,
+    error::{ApiJson, AppError},
+    models::chat::{ChatDecisionRequest, ChatDecisionResponse},
+    services, AppState,
 };
 
 /// Request body limit for this route only (the global limit stays at 4 KiB).
-pub(crate) const MAX_BODY_BYTES: usize = 32 * 1024;
-
-/// Maximum size of `content`, in UTF-8 bytes.
-pub(crate) const MAX_CONTENT_BYTES: usize = 16 * 1024;
-
-const ACTION_ALLOW: &str = "allow";
-const ACTION_BLOCK: &str = "block";
-
-// No `Debug` on purpose: a `{:?}` of this struct would print the content.
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-pub(crate) struct ChatDecisionRequest {
-    // Validated on parse so the contract is enforced now; no detector reads
-    // it yet, which is why the compiler would otherwise flag it as unused.
-    #[allow(dead_code)]
-    role: Role,
-    content: String,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "lowercase")]
-enum Role {
-    User,
-    System,
-    Assistant,
-}
-
-#[derive(Serialize)]
-pub(crate) struct ChatDecisionResponse {
-    action: &'static str,
-    reason_codes: Vec<&'static str>,
-    findings: Vec<Finding>,
-}
-
-impl ChatDecisionResponse {
-    fn from_findings(findings: Vec<Finding>) -> Self {
-        let mut reason_codes: Vec<&'static str> = Vec::new();
-        for finding in &findings {
-            if !reason_codes.contains(&finding.code) {
-                reason_codes.push(finding.code);
-            }
-        }
-        let action = if findings.is_empty() {
-            ACTION_ALLOW
-        } else {
-            ACTION_BLOCK
-        };
-        Self {
-            action,
-            reason_codes,
-            findings,
-        }
-    }
-}
+///
+/// JSON may escape each character as `\uXXXX` (6 bytes, 12 for a surrogate
+/// pair), so 16 KiB of content can take up to 96 KiB of body.
+pub(crate) const MAX_BODY_BYTES: usize = 100 * 1024;
 
 pub(crate) async fn decide_chat(
     State(state): State<AppState>,
-    input: Result<Json<ChatDecisionRequest>, JsonRejection>,
-) -> Result<Json<ChatDecisionResponse>, StatusCode> {
-    let Json(input) = input.map_err(rejection_status)?;
-    if input.content.len() > MAX_CONTENT_BYTES {
-        return Err(StatusCode::PAYLOAD_TOO_LARGE);
-    }
-    let findings = scan(state.detectors.as_slice(), &input.content);
-    Ok(Json(ChatDecisionResponse::from_findings(findings)))
-}
-
-/// Maps axum's JSON rejections onto this route's contract.
-///
-/// axum answers 422 for a well-formed document with the wrong shape (unknown
-/// field, invalid role, missing field). This API treats every contract
-/// violation as 400. Other rejections keep their status: 413 for a body over
-/// the limit and 415 for a missing JSON content type.
-fn rejection_status(rejection: JsonRejection) -> StatusCode {
-    match rejection {
-        JsonRejection::JsonDataError(_) | JsonRejection::JsonSyntaxError(_) => {
-            StatusCode::BAD_REQUEST
-        }
-        other => other.status(),
-    }
-}
-
-fn scan(detectors: &[Box<dyn Detector>], content: &str) -> Vec<Finding> {
-    detectors
-        .iter()
-        .flat_map(|detector| detector.scan(content))
-        .collect()
+    ApiJson(input): ApiJson<ChatDecisionRequest>,
+) -> Result<Json<ChatDecisionResponse>, AppError> {
+    Ok(Json(services::chat::decide(&state.detectors, &input)?))
 }
 
 #[cfg(test)]
@@ -114,8 +33,12 @@ mod tests {
     use serde_json::{json, Value};
     use tower::ServiceExt;
 
-    use super::{MAX_BODY_BYTES, MAX_CONTENT_BYTES};
-    use crate::{app, AppState};
+    use super::MAX_BODY_BYTES;
+    use crate::{
+        app,
+        services::chat::{MAX_CONTENT_BYTES, MAX_FINDINGS},
+        AppState,
+    };
 
     const REASON: &str = "content.invisible_unicode";
 
@@ -172,7 +95,7 @@ mod tests {
             assert_eq!(status, StatusCode::OK, "content {content:?}");
             assert_eq!(
                 json,
-                json!({ "action": "allow", "reason_codes": [], "findings": [] })
+                json!({ "action": "allow", "reason_codes": [], "findings": [], "truncated": false })
             );
         }
     }
@@ -189,7 +112,8 @@ mod tests {
                 "reason_codes": [REASON],
                 "findings": [
                     { "code": REASON, "detector": "invisible_unicode", "start": 5, "end": 8 }
-                ]
+                ],
+                "truncated": false
             })
         );
     }
@@ -247,7 +171,7 @@ mod tests {
 
     #[tokio::test]
     async fn route_body_limit_overrides_global_limit() {
-        // Larger than the global 4 KiB limit, within this route's 32 KiB.
+        // Larger than the global 4 KiB limit, within this route's 100 KiB.
         let (status, _) = chat(message(&"a".repeat(5000)), Some(&test_key())).await;
         assert_eq!(status, StatusCode::OK);
 
@@ -258,15 +182,93 @@ mod tests {
 
     #[tokio::test]
     async fn response_never_echoes_content() {
-        let secret = "SEGREDO-f3a9c1";
-        for content in [secret.to_owned(), format!("{secret}\u{200B}")] {
+        let marker = "texto-marcador-f3a9c1";
+        for content in [marker.to_owned(), format!("{marker}\u{200B}")] {
             let (status, body) = chat(message(&content), Some(&test_key())).await;
             assert_eq!(status, StatusCode::OK);
-            assert!(!body.contains(secret), "response leaked content: {body}");
+            assert!(!body.contains(marker), "response leaked content: {body}");
             assert!(
                 !body.contains('\u{200B}'),
                 "response leaked content: {body}"
             );
         }
+    }
+
+    #[tokio::test]
+    async fn accepts_content_at_the_limit_when_json_escapes_it() {
+        // 8192 Cyrillic letters: 16 KiB as UTF-8, about 49 KiB as \uXXXX escapes.
+        let escaped = "\\u0436".repeat(MAX_CONTENT_BYTES / 2);
+        let body = format!(r#"{{"role":"user","content":"{escaped}"}}"#);
+        assert!(body.len() > 48 * 1024);
+        let (status, _) = chat(body, Some(&test_key())).await;
+        assert_eq!(status, StatusCode::OK);
+    }
+
+    #[tokio::test]
+    async fn lists_at_most_max_findings_and_says_so() {
+        let (status, json) = decide(&"a\u{200B}".repeat(MAX_FINDINGS)).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(
+            json["findings"].as_array().map(Vec::len),
+            Some(MAX_FINDINGS)
+        );
+        assert_eq!(json["truncated"], false);
+
+        let (status, json) = decide(&"a\u{200B}".repeat(MAX_FINDINGS + 1)).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(json["action"], "block");
+        assert_eq!(
+            json["findings"].as_array().map(Vec::len),
+            Some(MAX_FINDINGS)
+        );
+        assert_eq!(json["truncated"], true);
+    }
+
+    #[tokio::test]
+    async fn error_bodies_carry_the_documented_codes() {
+        for (body, content_type, status, code) in [
+            (
+                "{not json",
+                "application/json",
+                StatusCode::BAD_REQUEST,
+                "invalid_json",
+            ),
+            (
+                r#"{"role":"admin","content":"x"}"#,
+                "application/json",
+                StatusCode::BAD_REQUEST,
+                "invalid_body",
+            ),
+            (
+                r#"{"role":"user","content":"x"}"#,
+                "text/plain",
+                StatusCode::UNSUPPORTED_MEDIA_TYPE,
+                "unsupported_media_type",
+            ),
+        ] {
+            let request = Request::builder()
+                .method("POST")
+                .uri("/v1/decisions/chat")
+                .header("content-type", content_type)
+                .header("x-voidgate-key", test_key())
+                .body(Body::from(body))
+                .expect("valid request");
+            let response = test_app().oneshot(request).await.expect("router response");
+            assert_eq!(response.status(), status, "{body}");
+            let bytes = to_bytes(response.into_body(), 4096).await.expect("body");
+            let json: Value = serde_json::from_slice(&bytes).expect("json error body");
+            assert_eq!(json["error"]["code"], code, "{body}");
+        }
+    }
+
+    #[tokio::test]
+    async fn emoji_and_persian_text_are_allowed_but_hidden_tags_are_blocked() {
+        let (_, json) = decide("Sou dev \u{1F469}\u{200D}\u{1F4BB}").await;
+        assert_eq!(json["action"], "allow");
+        let (_, json) = decide("\u{0645}\u{06CC}\u{200C}\u{062E}\u{0648}").await;
+        assert_eq!(json["action"], "allow");
+        let (_, json) = decide("Resuma.\u{E0069}\u{E0067}\u{E006E}").await;
+        assert_eq!(json["action"], "block");
+        assert_eq!(json["findings"].as_array().map(Vec::len), Some(1));
     }
 }

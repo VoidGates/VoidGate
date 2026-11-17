@@ -17,7 +17,7 @@ use axum::{
     response::{IntoResponse, Response},
 };
 
-use crate::{auth::ClientKey, AppState};
+use crate::{auth::ClientKey, error::AppError, AppState};
 
 const WINDOW: Duration = Duration::from_secs(60);
 const DEFAULT_REQUESTS_PER_MINUTE: u32 = 60;
@@ -133,15 +133,19 @@ pub(crate) async fn enforce(
     State(state): State<AppState>,
     request: Request,
     next: Next,
-) -> Result<Response, StatusCode> {
+) -> Result<Response, AppError> {
     let Some(client) = request.extensions().get::<ClientKey>().copied() else {
-        return Err(StatusCode::SERVICE_UNAVAILABLE);
+        return Err(AppError::Unavailable);
     };
     state
         .metrics
         .authenticated_decisions
         .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-    match state.rate_limiter.check(client)? {
+    match state
+        .rate_limiter
+        .check(client)
+        .map_err(|_| AppError::Unavailable)?
+    {
         Decision::Allow => Ok(next.run(request).await),
         Decision::Reject {
             retry_after_seconds,
@@ -151,8 +155,8 @@ pub(crate) async fn enforce(
                 .rate_limit_rejections
                 .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             let value = HeaderValue::from_str(&retry_after_seconds.to_string())
-                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
-            let mut response = StatusCode::TOO_MANY_REQUESTS.into_response();
+                .map_err(|_| AppError::Unavailable)?;
+            let mut response = AppError::RateLimited.into_response();
             response.headers_mut().insert(RETRY_AFTER, value);
             Ok(response)
         }

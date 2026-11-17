@@ -1,4 +1,4 @@
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use axum::{
     extract::{Request, State},
@@ -29,12 +29,27 @@ pub(crate) async fn protect(
             StatusCode::SERVICE_UNAVAILABLE
         })?;
 
+    let started = Instant::now();
     match timeout(DECISION_TIMEOUT, next.run(request)).await {
-        Ok(response) => Ok(response),
+        Ok(response) => {
+            state.metrics.observe_decision_duration(started.elapsed());
+            if !response.status().is_success() {
+                state
+                    .metrics
+                    .decision_errors
+                    .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            }
+            Ok(response)
+        }
         Err(_) => {
+            state.metrics.observe_decision_duration(started.elapsed());
             state
                 .metrics
                 .decision_timeouts
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            state
+                .metrics
+                .decision_errors
                 .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             Ok(StatusCode::GATEWAY_TIMEOUT.into_response())
         }

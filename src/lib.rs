@@ -1,106 +1,56 @@
-mod auth;
-mod chat;
-mod detectors;
-mod policy;
+//! VoidGate decision API.
+//!
+//! Layers, from the outside in:
+//! `handlers` (HTTP) -> `services` (rules and orchestration) -> `domain`
+//! (pure decisions). `models` holds the JSON bodies, `error` the single error
+//! contract, `state` the configuration shared by requests.
 
-use std::sync::Arc;
+mod auth;
+mod domain;
+mod error;
+mod handlers;
+mod models;
+mod services;
+mod state;
 
 use axum::{
-    extract::{DefaultBodyLimit, State},
-    http::StatusCode,
+    extract::DefaultBodyLimit,
     middleware,
     routing::{get, post},
-    Json, Router,
+    Router,
 };
-use serde::{Deserialize, Serialize};
 
-use auth::{authorize, ApiKeyVerifier};
-use detectors::Detector;
-use policy::{valid_path, Decision, ExactPathPolicy};
+use handlers::{chat, health::health, http};
+
+pub use handlers::docs::dev_docs;
+pub use state::AppState;
 
 const MAX_BODY_BYTES: usize = 4096;
 
-#[derive(Clone)]
-pub struct AppState {
-    key_verifier: ApiKeyVerifier,
-    policy: Arc<ExactPathPolicy>,
-    detectors: Arc<Vec<Box<dyn Detector>>>,
-}
-
-impl AppState {
-    pub fn new(api_key: String, decoy_paths: Vec<String>) -> Result<Self, String> {
-        Ok(Self {
-            key_verifier: ApiKeyVerifier::new(&api_key)?,
-            policy: Arc::new(ExactPathPolicy::new(decoy_paths)?),
-            detectors: Arc::new(detectors::default_detectors()),
-        })
-    }
-}
-
 pub fn app(state: AppState) -> Router {
-    let decisions = Router::new()
-        .route("/v1/decisions/http", post(decide_http))
+    // `layer` (not `route_layer`) so the fallback is authenticated too: without
+    // a valid key, an unknown route answers exactly like a real one.
+    let protected = Router::new()
+        .route("/v1/decisions/http", post(http::decide_http))
         .route(
             "/v1/decisions/chat",
             post(chat::decide_chat).layer(DefaultBodyLimit::max(chat::MAX_BODY_BYTES)),
         )
-        .route_layer(middleware::from_fn_with_state(state.clone(), authorize));
+        .fallback(error::not_found)
+        .method_not_allowed_fallback(error::method_not_allowed)
+        .layer(middleware::from_fn_with_state(
+            state.clone(),
+            auth::authorize,
+        ));
 
     Router::new()
         .route("/health", get(health))
         .route("/live", get(health))
         .route("/ready", get(health))
-        .merge(decisions)
+        .method_not_allowed_fallback(error::method_not_allowed)
+        .merge(protected)
         .layer(DefaultBodyLimit::max(MAX_BODY_BYTES))
         .with_state(state)
-}
-
-async fn health() -> Json<HealthResponse> {
-    Json(HealthResponse { status: "ok" })
-}
-
-#[derive(Serialize)]
-struct HealthResponse {
-    status: &'static str,
-}
-
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-struct HttpDecisionRequest {
-    method: String,
-    path: String,
-}
-
-#[derive(Serialize)]
-struct HttpDecisionResponse {
-    action: &'static str,
-    reason_code: &'static str,
-}
-
-async fn decide_http(
-    State(state): State<AppState>,
-    Json(input): Json<HttpDecisionRequest>,
-) -> Result<Json<HttpDecisionResponse>, StatusCode> {
-    if !valid_method(&input.method) || !valid_path(&input.path) {
-        return Err(StatusCode::BAD_REQUEST);
-    }
-
-    let (action, reason_code) = match state.policy.evaluate(&input.path) {
-        Decision::Decoy => ("decoy", "registered_decoy_path"),
-        Decision::Allow => ("allow", "no_matching_rule"),
-    };
-
-    Ok(Json(HttpDecisionResponse {
-        action,
-        reason_code,
-    }))
-}
-
-fn valid_method(method: &str) -> bool {
-    matches!(
-        method,
-        "GET" | "HEAD" | "POST" | "PUT" | "PATCH" | "DELETE" | "OPTIONS"
-    )
 }
 
 #[cfg(test)]
@@ -111,7 +61,7 @@ mod tests {
     };
     use tower::ServiceExt;
 
-    use super::{app, AppState};
+    use super::{app, dev_docs, AppState};
 
     fn test_app() -> axum::Router {
         app(
@@ -204,5 +154,99 @@ mod tests {
     fn rejects_weak_key_and_invalid_decoy_path() {
         assert!(AppState::new("short".into(), vec![]).is_err());
         assert!(AppState::new("a".repeat(32), vec!["relative".into()]).is_err());
+    }
+
+    async fn send(
+        router: axum::Router,
+        method: &str,
+        uri: &str,
+        key: bool,
+    ) -> (StatusCode, String) {
+        let mut request = Request::builder().method(method).uri(uri);
+        if key {
+            request = request.header("x-voidgate-key", "a".repeat(32));
+        }
+        let response = router
+            .oneshot(request.body(Body::empty()).expect("request"))
+            .await
+            .expect("response");
+        let status = response.status();
+        let body = to_bytes(response.into_body(), 64 * 1024)
+            .await
+            .expect("response body");
+        (
+            status,
+            String::from_utf8(body.to_vec()).expect("utf8 response"),
+        )
+    }
+
+    const UNAUTHORIZED: &str =
+        r#"{"error":{"code":"unauthorized","message":"Missing or invalid credentials."}}"#;
+    const INVALID_BODY: &str = r#"{"error":{"code":"invalid_body","message":"Request body does not match the documented contract."}}"#;
+
+    #[tokio::test]
+    async fn without_key_every_non_health_route_answers_the_same() {
+        for (method, uri) in [
+            ("POST", "/v1/decisions/http"),
+            ("GET", "/v1/decisions/http"),
+            ("GET", "/v1/decisions/unknown"),
+            ("GET", "/docs"),
+            ("GET", "/"),
+        ] {
+            let (status, body) = send(test_app(), method, uri, false).await;
+            assert_eq!(status, StatusCode::UNAUTHORIZED, "{method} {uri}");
+            assert_eq!(body, UNAUTHORIZED, "{method} {uri}");
+        }
+    }
+
+    #[tokio::test]
+    async fn with_key_routing_errors_are_named() {
+        let (status, body) = send(test_app(), "GET", "/nope", true).await;
+        assert_eq!(status, StatusCode::NOT_FOUND);
+        assert!(body.contains(r#""code":"not_found""#));
+
+        let (status, body) = send(test_app(), "GET", "/v1/decisions/http", true).await;
+        assert_eq!(status, StatusCode::METHOD_NOT_ALLOWED);
+        assert!(body.contains(r#""code":"method_not_allowed""#));
+    }
+
+    #[tokio::test]
+    async fn body_errors_name_the_category_but_not_the_rule() {
+        let key = "a".repeat(32);
+        let (status, body) = decision("{not json", Some(&key)).await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert!(body.contains(r#""code":"invalid_json""#));
+
+        for input in [
+            r#"{"method":"GET"}"#,
+            r#"{"method":"GET","path":"/a","extra":1}"#,
+            r#"{"method":"TRACE","path":"/a"}"#,
+            r#"{"method":"GET","path":"/a/%2e%2e/b"}"#,
+        ] {
+            let (status, body) = decision(input, Some(&key)).await;
+            assert_eq!(status, StatusCode::BAD_REQUEST, "{input}");
+            assert_eq!(body, INVALID_BODY, "{input}");
+        }
+    }
+
+    #[tokio::test]
+    async fn dev_docs_serve_ui_and_a_spec_covering_every_route() {
+        let router = || test_app().merge(dev_docs());
+        let (status, body) = send(router(), "GET", "/docs", false).await;
+        assert_eq!(status, StatusCode::OK);
+        assert!(body.contains("swagger-ui"));
+
+        let (status, body) = send(router(), "GET", "/docs/openapi.json", false).await;
+        assert_eq!(status, StatusCode::OK);
+        let spec: serde_json::Value = serde_json::from_str(&body).expect("valid openapi json");
+        for path in [
+            "/health",
+            "/live",
+            "/ready",
+            "/v1/decisions/http",
+            "/v1/decisions/chat",
+        ] {
+            assert!(spec["paths"][path].is_object(), "spec is missing {path}");
+        }
     }
 }

@@ -1,0 +1,234 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "VoidGate backend",
+    "version": "0.1.0",
+    "description": "API de decisão do VoidGate. Clique em **Authorize** e informe o valor de `VOIDGATE_API_KEY`.\n\nAs respostas são para o gateway que integra a API. Nunca repasse `reason_code`, `reason_codes`, `findings` ou o corpo de um erro ao cliente final."
+  },
+  "tags": [
+    { "name": "Saúde", "description": "Rotas públicas de verificação do processo." },
+    { "name": "Decisões", "description": "Rotas autenticadas com `x-voidgate-key`." }
+  ],
+  "paths": {
+    "/health": {
+      "get": {
+        "tags": ["Saúde"],
+        "summary": "Processo no ar",
+        "responses": { "200": { "$ref": "#/components/responses/Health" } }
+      }
+    },
+    "/live": {
+      "get": {
+        "tags": ["Saúde"],
+        "summary": "Liveness",
+        "responses": { "200": { "$ref": "#/components/responses/Health" } }
+      }
+    },
+    "/ready": {
+      "get": {
+        "tags": ["Saúde"],
+        "summary": "Readiness (ainda não testa dependências externas)",
+        "responses": { "200": { "$ref": "#/components/responses/Health" } }
+      }
+    },
+    "/v1/decisions/http": {
+      "post": {
+        "tags": ["Decisões"],
+        "summary": "Decide se um caminho HTTP vai para a isca",
+        "description": "Corpo limitado a 4 KiB.",
+        "security": [{ "ApiKey": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/HttpDecisionRequest" },
+              "example": { "method": "GET", "path": "/internal/backup" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Decisão",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/HttpDecisionResponse" },
+                "examples": {
+                  "isca": { "value": { "action": "decoy", "reason_code": "registered_decoy_path" } },
+                  "livre": { "value": { "action": "allow", "reason_code": "no_matching_rule" } }
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "413": { "$ref": "#/components/responses/PayloadTooLarge" },
+          "415": { "$ref": "#/components/responses/UnsupportedMediaType" }
+        }
+      }
+    },
+    "/v1/decisions/chat": {
+      "post": {
+        "tags": ["Decisões"],
+        "summary": "Decide se uma mensagem de chat pode seguir",
+        "description": "Corpo limitado a 32 KiB e `content` a 16 KiB. O conteúdo nunca aparece na resposta; `start` e `end` são offsets em bytes (fim exclusivo).",
+        "security": [{ "ApiKey": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": { "$ref": "#/components/schemas/ChatDecisionRequest" },
+              "example": { "role": "user", "content": "Olá, tudo bem?" }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Decisão",
+            "content": {
+              "application/json": {
+                "schema": { "$ref": "#/components/schemas/ChatDecisionResponse" },
+                "examples": {
+                  "livre": { "value": { "action": "allow", "reason_codes": [], "findings": [] } },
+                  "bloqueada": {
+                    "value": {
+                      "action": "block",
+                      "reason_codes": ["content.invisible_unicode"],
+                      "findings": [
+                        { "code": "content.invisible_unicode", "detector": "invisible_unicode", "start": 5, "end": 8 }
+                      ]
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": { "$ref": "#/components/responses/BadRequest" },
+          "401": { "$ref": "#/components/responses/Unauthorized" },
+          "413": { "$ref": "#/components/responses/PayloadTooLarge" },
+          "415": { "$ref": "#/components/responses/UnsupportedMediaType" }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "ApiKey": { "type": "apiKey", "in": "header", "name": "x-voidgate-key" }
+    },
+    "schemas": {
+      "HttpDecisionRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["method", "path"],
+        "properties": {
+          "method": { "type": "string", "enum": ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"] },
+          "path": { "type": "string", "description": "Caminho absoluto, sem query string." }
+        }
+      },
+      "HttpDecisionResponse": {
+        "type": "object",
+        "required": ["action", "reason_code"],
+        "properties": {
+          "action": { "type": "string", "enum": ["allow", "decoy"] },
+          "reason_code": { "type": "string", "enum": ["no_matching_rule", "registered_decoy_path"] }
+        }
+      },
+      "ChatDecisionRequest": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["role", "content"],
+        "properties": {
+          "role": { "type": "string", "enum": ["user", "system", "assistant"] },
+          "content": { "type": "string", "description": "Texto UTF-8 de até 16 KiB." }
+        }
+      },
+      "ChatDecisionResponse": {
+        "type": "object",
+        "required": ["action", "reason_codes", "findings"],
+        "properties": {
+          "action": { "type": "string", "enum": ["allow", "block"] },
+          "reason_codes": { "type": "array", "items": { "type": "string" } },
+          "findings": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["code", "detector", "start", "end"],
+              "properties": {
+                "code": { "type": "string" },
+                "detector": { "type": "string" },
+                "start": { "type": "integer", "minimum": 0 },
+                "end": { "type": "integer", "minimum": 0 }
+              }
+            }
+          }
+        }
+      },
+      "Error": {
+        "type": "object",
+        "required": ["error"],
+        "properties": {
+          "error": {
+            "type": "object",
+            "required": ["code", "message"],
+            "properties": {
+              "code": {
+                "type": "string",
+                "enum": [
+                  "unauthorized",
+                  "not_found",
+                  "method_not_allowed",
+                  "invalid_json",
+                  "invalid_body",
+                  "payload_too_large",
+                  "unsupported_media_type"
+                ]
+              },
+              "message": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "responses": {
+      "Health": {
+        "description": "Processo no ar",
+        "content": { "application/json": { "example": { "status": "ok" } } }
+      },
+      "BadRequest": {
+        "description": "`invalid_json` (JSON malformado) ou `invalid_body` (campo ausente, extra ou com valor fora do contrato)",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/Error" },
+            "example": { "error": { "code": "invalid_body", "message": "Request body does not match the documented contract." } }
+          }
+        }
+      },
+      "Unauthorized": {
+        "description": "Chave ausente ou inválida. Sem chave válida, esta é a resposta de qualquer rota fora as de saúde.",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/Error" },
+            "example": { "error": { "code": "unauthorized", "message": "Missing or invalid credentials." } }
+          }
+        }
+      },
+      "PayloadTooLarge": {
+        "description": "Corpo ou `content` acima do limite",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/Error" },
+            "example": { "error": { "code": "payload_too_large", "message": "Request exceeds the documented size limit." } }
+          }
+        }
+      },
+      "UnsupportedMediaType": {
+        "description": "Sem `Content-Type: application/json`",
+        "content": {
+          "application/json": {
+            "schema": { "$ref": "#/components/schemas/Error" },
+            "example": { "error": { "code": "unsupported_media_type", "message": "Content-Type must be application/json." } }
+          }
+        }
+      }
+    }
+  }
+}

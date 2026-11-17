@@ -1,13 +1,13 @@
 use axum::{
     extract::{Request, State},
-    http::{HeaderValue, StatusCode},
+    http::HeaderValue,
     middleware::Next,
     response::Response,
 };
 use sha2::{Digest, Sha256};
 use subtle::ConstantTimeEq;
 
-use crate::AppState;
+use crate::{error::AppError, AppState};
 
 #[derive(Clone)]
 pub(crate) struct ApiKeyVerifier([u8; 32]);
@@ -33,12 +33,12 @@ pub(crate) async fn authorize(
     State(state): State<AppState>,
     request: Request,
     next: Next,
-) -> Result<Response, StatusCode> {
+) -> Result<Response, AppError> {
     if !state
         .key_verifier
         .verify(request.headers().get("x-voidgate-key"))
     {
-        return Err(StatusCode::UNAUTHORIZED);
+        return Err(AppError::Unauthorized);
     }
     Ok(next.run(request).await)
 }

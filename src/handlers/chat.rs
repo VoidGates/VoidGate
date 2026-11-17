@@ -3,106 +3,22 @@
 //! The message content is inspected in memory and discarded. It is never
 //! echoed in the response, stored, or logged; only byte offsets are reported.
 
-use axum::{
-    extract::{rejection::JsonRejection, State},
-    http::StatusCode,
-    Json,
-};
-use serde::{Deserialize, Serialize};
+use axum::{extract::State, Json};
 
 use crate::{
-    detectors::{Detector, Finding},
-    AppState,
+    error::{ApiJson, AppError},
+    models::chat::{ChatDecisionRequest, ChatDecisionResponse},
+    services, AppState,
 };
 
 /// Request body limit for this route only (the global limit stays at 4 KiB).
 pub(crate) const MAX_BODY_BYTES: usize = 32 * 1024;
 
-/// Maximum size of `content`, in UTF-8 bytes.
-pub(crate) const MAX_CONTENT_BYTES: usize = 16 * 1024;
-
-const ACTION_ALLOW: &str = "allow";
-const ACTION_BLOCK: &str = "block";
-
-// No `Debug` on purpose: a `{:?}` of this struct would print the content.
-#[derive(Deserialize)]
-#[serde(deny_unknown_fields)]
-pub(crate) struct ChatDecisionRequest {
-    // Validated on parse so the contract is enforced now; no detector reads
-    // it yet, which is why the compiler would otherwise flag it as unused.
-    #[allow(dead_code)]
-    role: Role,
-    content: String,
-}
-
-#[derive(Deserialize)]
-#[serde(rename_all = "lowercase")]
-enum Role {
-    User,
-    System,
-    Assistant,
-}
-
-#[derive(Serialize)]
-pub(crate) struct ChatDecisionResponse {
-    action: &'static str,
-    reason_codes: Vec<&'static str>,
-    findings: Vec<Finding>,
-}
-
-impl ChatDecisionResponse {
-    fn from_findings(findings: Vec<Finding>) -> Self {
-        let mut reason_codes: Vec<&'static str> = Vec::new();
-        for finding in &findings {
-            if !reason_codes.contains(&finding.code) {
-                reason_codes.push(finding.code);
-            }
-        }
-        let action = if findings.is_empty() {
-            ACTION_ALLOW
-        } else {
-            ACTION_BLOCK
-        };
-        Self {
-            action,
-            reason_codes,
-            findings,
-        }
-    }
-}
-
 pub(crate) async fn decide_chat(
     State(state): State<AppState>,
-    input: Result<Json<ChatDecisionRequest>, JsonRejection>,
-) -> Result<Json<ChatDecisionResponse>, StatusCode> {
-    let Json(input) = input.map_err(rejection_status)?;
-    if input.content.len() > MAX_CONTENT_BYTES {
-        return Err(StatusCode::PAYLOAD_TOO_LARGE);
-    }
-    let findings = scan(state.detectors.as_slice(), &input.content);
-    Ok(Json(ChatDecisionResponse::from_findings(findings)))
-}
-
-/// Maps axum's JSON rejections onto this route's contract.
-///
-/// axum answers 422 for a well-formed document with the wrong shape (unknown
-/// field, invalid role, missing field). This API treats every contract
-/// violation as 400. Other rejections keep their status: 413 for a body over
-/// the limit and 415 for a missing JSON content type.
-fn rejection_status(rejection: JsonRejection) -> StatusCode {
-    match rejection {
-        JsonRejection::JsonDataError(_) | JsonRejection::JsonSyntaxError(_) => {
-            StatusCode::BAD_REQUEST
-        }
-        other => other.status(),
-    }
-}
-
-fn scan(detectors: &[Box<dyn Detector>], content: &str) -> Vec<Finding> {
-    detectors
-        .iter()
-        .flat_map(|detector| detector.scan(content))
-        .collect()
+    ApiJson(input): ApiJson<ChatDecisionRequest>,
+) -> Result<Json<ChatDecisionResponse>, AppError> {
+    Ok(Json(services::chat::decide(&state.detectors, &input)?))
 }
 
 #[cfg(test)]
@@ -114,8 +30,8 @@ mod tests {
     use serde_json::{json, Value};
     use tower::ServiceExt;
 
-    use super::{MAX_BODY_BYTES, MAX_CONTENT_BYTES};
-    use crate::{app, AppState};
+    use super::MAX_BODY_BYTES;
+    use crate::{app, services::chat::MAX_CONTENT_BYTES, AppState};
 
     const REASON: &str = "content.invisible_unicode";
 

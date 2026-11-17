@@ -1,0 +1,55 @@
+name: PR Guard
+
+# pull_request_target runs the workflow and scanner from main, so a PR can't
+# edit the guard to pass itself. The PR's code is only read as a diff, never run.
+# merge_group re-scans the combined diff using the trusted scanner from main.
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, ready_for_review]
+  merge_group:
+
+permissions:
+  contents: read
+  pull-requests: write
+
+concurrency:
+  group: pr-guard-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  pr-guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Scan PR diff
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          BASE: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
+          HEAD_SHA: ${{ github.event.merge_group.head_sha }}
+          QUEUE_REF: ${{ github.event.merge_group.head_ref }}
+        run: |
+          if [ -z "$PR" ]; then
+            git fetch --no-tags origin "$QUEUE_REF"
+            test "$(git rev-parse FETCH_HEAD)" = "$HEAD_SHA"
+            HEAD=FETCH_HEAD
+          else
+            git fetch --no-tags origin "refs/pull/$PR/head"
+            HEAD=FETCH_HEAD
+          fi
+          set -o pipefail
+          set +e
+          git diff --unified=0 --no-color "$BASE...$HEAD" | node .github/scripts/pr-guard.mjs > report.md
+          status=$?
+          set -e
+          cat report.md
+          if [ -n "$PR" ]; then
+            gh pr comment "$PR" -R "$GITHUB_REPOSITORY" --edit-last --create-if-none --body-file report.md
+          fi
+          exit $status

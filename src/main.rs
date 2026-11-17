@@ -46,7 +46,11 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
         .filter(|path| !path.is_empty())
         .map(str::to_owned)
         .collect();
-    let state = AppState::new(api_key, paths)?;
+    let rate_limit = match optional_env("VOIDGATE_RATE_LIMIT_PER_MINUTE")? {
+        Some(value) => RateLimitConfig::per_minute(value.parse::<u32>()?)?,
+        None => RateLimitConfig::default(),
+    };
+    let state = AppState::with_rate_limit(api_key, paths, rate_limit)?;
 
     let address: SocketAddr = setting("VOIDGATE_BIND")?
         .unwrap_or_else(|| "127.0.0.1:8080".into())

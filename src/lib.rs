@@ -154,6 +154,69 @@ mod tests {
         );
     }
 
+    #[tokio::test]
+    async fn limits_authenticated_decisions_without_affecting_health() {
+        let state = AppState::with_rate_limit(
+            "a".repeat(32),
+            vec![],
+            RateLimitConfig::per_minute(2).expect("valid limit"),
+        )
+        .expect("valid test config");
+        let router = app(state);
+        let request = |key: Option<&str>| {
+            let mut builder = Request::builder()
+                .method("POST")
+                .uri("/v1/decisions/http")
+                .header("content-type", "application/json");
+            if let Some(key) = key {
+                builder = builder.header("x-voidgate-key", key);
+            }
+            builder
+                .body(Body::from(r#"{"method":"GET","path":"/public"}"#))
+                .expect("request")
+        };
+
+        assert_eq!(
+            router
+                .clone()
+                .oneshot(request(None))
+                .await
+                .expect("response")
+                .status(),
+            StatusCode::UNAUTHORIZED
+        );
+        let key = "a".repeat(32);
+        for _ in 0..2 {
+            assert_eq!(
+                router
+                    .clone()
+                    .oneshot(request(Some(&key)))
+                    .await
+                    .expect("response")
+                    .status(),
+                StatusCode::OK
+            );
+        }
+        let limited = router
+            .clone()
+            .oneshot(request(Some(&key)))
+            .await
+            .expect("response");
+        assert_eq!(limited.status(), StatusCode::TOO_MANY_REQUESTS);
+        assert!(limited.headers().contains_key("retry-after"));
+
+        let health = router
+            .oneshot(
+                Request::builder()
+                    .uri("/health")
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+        assert_eq!(health.status(), StatusCode::OK);
+    }
+
     #[test]
     fn rejects_weak_key_and_invalid_decoy_path() {
         assert!(AppState::new("short".into(), vec![]).is_err());

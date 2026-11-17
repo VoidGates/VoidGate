@@ -9,6 +9,16 @@ use subtle::ConstantTimeEq;
 
 use crate::{error::AppError, AppState};
 
+#[derive(Clone, Copy, Hash, PartialEq, Eq)]
+pub(crate) struct ClientKey([u8; 32]);
+
+impl ClientKey {
+    #[cfg(test)]
+    pub(crate) fn test_key(value: u8) -> Self {
+        Self([value; 32])
+    }
+}
+
 #[derive(Clone)]
 pub(crate) struct ApiKeyVerifier([u8; 32]);
 
@@ -33,11 +43,15 @@ impl ApiKeyVerifier {
         let supplied_digest: [u8; 32] = Sha256::digest(supplied.as_bytes()).into();
         bool::from(self.0[..].ct_eq(&supplied_digest[..]))
     }
+
+    fn client_key(&self) -> ClientKey {
+        ClientKey(self.0)
+    }
 }
 
 pub(crate) async fn authorize(
     State(state): State<AppState>,
-    request: Request,
+    mut request: Request,
     next: Next,
 ) -> Result<Response, AppError> {
     if !state
@@ -46,5 +60,8 @@ pub(crate) async fn authorize(
     {
         return Err(AppError::Unauthorized);
     }
+    request
+        .extensions_mut()
+        .insert(state.key_verifier.client_key());
     Ok(next.run(request).await)
 }

@@ -20,6 +20,7 @@ Uma variável definida no ambiente do processo sempre vence o `.env`. Em produç
 | `VOIDGATE_API_KEY` | Sim | Chave enviada no cabeçalho `x-voidgate-key` da rota de decisão. |
 | `VOIDGATE_DECOY_PATHS` | Não | Caminhos exatos separados por vírgula; padrão: nenhum. |
 | `VOIDGATE_BIND` | Não | Endereço de escuta; padrão: `127.0.0.1:8080`. |
+| `VOIDGATE_RATE_LIMIT_PER_MINUTE` | Não | Pedidos de decisão por minuto para a credencial; de 1 a 10000, padrão: `60`. |
 | `VOIDGATE_DEV_DOCS` | Não | `1` liga a tela de testes em `/docs`; `0` ou ausente desliga. Só existe em build de desenvolvimento. |
 
 Sem `.env`, exemplo para gerar uma chave no PowerShell e rodar só com variáveis de ambiente:
@@ -40,9 +41,13 @@ O processo se recusa a iniciar, com uma mensagem `error: ...`, quando a configur
 - caminho de isca inválido, `VOIDGATE_BIND` inválido ou porta em uso;
 - `.env` ilegível (por exemplo, salvo em UTF-16 pelo PowerShell);
 - nome desconhecido com prefixo `VOIDGATE_`, no `.env` ou no ambiente, como `VOIDGATE_DECOY_PATH` sem o S;
-- `VOIDGATE_DEV_DOCS` diferente de `0` e `1`.
+- `VOIDGATE_DEV_DOCS` diferente de `0` e `1`, ou `VOIDGATE_RATE_LIMIT_PER_MINUTE` que não seja um número de 1 a 10000.
 
 Ao subir, o processo imprime `voidgate-backend listening on http://<endereço>`. Os valores opcionais ausentes usam os padrões acima.
+
+### Encerramento
+
+Ao receber Ctrl+C, ou SIGTERM em sistemas Unix, o processo para de aceitar conexões, deixa cada conexão aberta terminar a requisição em andamento e só então encerra. Conexões ociosas são fechadas na hora. Se alguma requisição não terminar em 10 s, ela é interrompida.
 
 ### Limites de conexão
 
@@ -50,9 +55,10 @@ Ao subir, o processo imprime `voidgate-backend listening on http://<endereço>`.
 | --- | --- |
 | Conexões simultâneas | 1024; as seguintes aguardam na fila do sistema operacional |
 | Tempo para enviar os cabeçalhos, e tempo máximo de conexão ociosa | 30 s; depois a conexão é encerrada |
-| Tempo para a requisição chegar inteira e ser respondida | 15 s; depois a resposta é `408` |
+| Tempo de uma decisão, contando a chegada do corpo | 5 s; depois a resposta é `504` |
+| Decisões simultâneas | 256; acima disso a resposta é `503` |
 
-Os valores ficam em `src/server.rs`. Eles limitam o consumo de recursos, mas não impedem que um único cliente ocupe todas as conexões: o limite por origem é papel do gateway.
+Os valores de conexão ficam em `src/server.rs`; os de decisão, em `src/runtime.rs` e `src/state.rs`. Eles limitam o consumo de recursos, mas não impedem que um único cliente ocupe todas as conexões: o limite por origem é papel do gateway.
 
 ## Tela de testes (só em desenvolvimento)
 
@@ -90,7 +96,9 @@ Todo erro sai no mesmo formato, com código e mensagem fixos:
 | 400 | `invalid_body` | Campo ausente, extra ou com valor fora do contrato. |
 | 413 | `payload_too_large` | Corpo ou `content` acima do limite. |
 | 415 | `unsupported_media_type` | Sem `Content-Type: application/json`. |
-| 408 | `request_timeout` | A requisição levou mais de 15 s para chegar inteira. |
+| 429 | `rate_limited` | Limite de pedidos por minuto excedido; traz o cabeçalho `Retry-After`. |
+| 503 | `unavailable` | 256 decisões já em andamento, ou limitador indisponível. |
+| 504 | `decision_timeout` | A decisão passou de 5 s, contando a chegada do corpo. |
 | 404 | `not_found` | Rota desconhecida (só com chave válida). |
 | 405 | `method_not_allowed` | Método não aceito pela rota. |
 
@@ -136,7 +144,10 @@ Na prática, isso define onde cada mudança entra:
 src/
 ├── main.rs        lê a configuração (.env e ambiente) e sobe o servidor
 ├── lib.rs         monta o roteador: rotas, autenticação, limites de corpo
-├── server.rs      aceita conexões com timeouts e limite de conexões
+├── server.rs      aceita conexões com timeouts, limite de conexões e encerramento gracioso
+├── rate_limit.rs  limite de pedidos por credencial
+├── runtime.rs     limite de decisões simultâneas e tempo máximo por decisão
+├── metrics.rs     contadores agregados expostos em /metrics
 ├── state.rs       AppState: configuração compartilhada, criada na inicialização
 ├── auth.rs        middleware da chave x-voidgate-key
 ├── error.rs       AppError: o único formato de erro da API

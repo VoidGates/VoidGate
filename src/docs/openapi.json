@@ -3,7 +3,7 @@
   "info": {
     "title": "VoidGate backend",
     "version": "0.1.0",
-    "description": "API de decisão do VoidGate. Clique em **Authorize** e informe o valor de `VOIDGATE_API_KEY`.\n\nAs respostas são para o gateway que integra a API. Nunca repasse `reason_code`, `reason_codes`, `findings` ou o corpo de um erro ao cliente final.\n\nUma requisição tem 15 segundos para chegar inteira; depois disso a resposta é `408`."
+    "description": "API de decisão do VoidGate. Clique em **Authorize** e informe o valor de `VOIDGATE_API_KEY`.\n\nAs respostas são para o gateway que integra a API. Nunca repasse `reason_code`, `reason_codes`, `findings` ou o corpo de um erro ao cliente final.\n\nAs rotas de decisão têm limite por credencial (`429` com `Retry-After`), no máximo 256 decisões simultâneas (`503`) e 5 segundos por decisão, contando a chegada do corpo (`504`)."
   },
   "tags": [
     {
@@ -13,6 +13,10 @@
     {
       "name": "Decisões",
       "description": "Rotas autenticadas com `x-voidgate-key`."
+    },
+    {
+      "name": "Operação",
+      "description": "Rotas autenticadas para quem opera o serviço."
     }
   ],
   "paths": {
@@ -47,10 +51,54 @@
         "tags": [
           "Saúde"
         ],
-        "summary": "Readiness (ainda não testa dependências externas)",
+        "summary": "Readiness: o limitador em memória está utilizável",
         "responses": {
           "200": {
-            "$ref": "#/components/responses/Health"
+            "description": "Pronto para decidir",
+            "content": {
+              "application/json": {
+                "example": {
+                  "status": "ready"
+                }
+              }
+            }
+          },
+          "503": {
+            "description": "Limitador indisponível",
+            "content": {
+              "application/json": {
+                "example": {
+                  "status": "not_ready"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/metrics": {
+      "get": {
+        "tags": [
+          "Operação"
+        ],
+        "summary": "Contadores agregados no formato Prometheus",
+        "description": "Só contadores: sem conteúdo, caminhos ou credenciais. Não consome o limite de decisões.",
+        "security": [
+          {
+            "ApiKey": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Métricas em texto",
+            "content": {
+              "text/plain": {
+                "example": "voidgate_authenticated_decisions_total 12\n"
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
           }
         }
       }
@@ -118,14 +166,20 @@
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
           },
-          "408": {
-            "$ref": "#/components/responses/RequestTimeout"
-          },
           "413": {
             "$ref": "#/components/responses/PayloadTooLarge"
           },
           "415": {
             "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "504": {
+            "$ref": "#/components/responses/DecisionTimeout"
           }
         }
       }
@@ -206,14 +260,20 @@
           "405": {
             "$ref": "#/components/responses/MethodNotAllowed"
           },
-          "408": {
-            "$ref": "#/components/responses/RequestTimeout"
-          },
           "413": {
             "$ref": "#/components/responses/PayloadTooLarge"
           },
           "415": {
             "$ref": "#/components/responses/UnsupportedMediaType"
+          },
+          "429": {
+            "$ref": "#/components/responses/RateLimited"
+          },
+          "503": {
+            "$ref": "#/components/responses/Unavailable"
+          },
+          "504": {
+            "$ref": "#/components/responses/DecisionTimeout"
           }
         }
       }
@@ -384,7 +444,9 @@
                   "invalid_body",
                   "payload_too_large",
                   "unsupported_media_type",
-                  "request_timeout"
+                  "rate_limited",
+                  "unavailable",
+                  "decision_timeout"
                 ]
               },
               "message": {
@@ -502,8 +564,17 @@
           }
         }
       },
-      "RequestTimeout": {
-        "description": "O corpo demorou mais de 15 segundos para chegar.",
+      "RateLimited": {
+        "description": "Limite de pedidos por minuto excedido para a credencial.",
+        "headers": {
+          "Retry-After": {
+            "description": "Segundos até poder tentar de novo.",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        },
         "content": {
           "application/json": {
             "schema": {
@@ -511,8 +582,40 @@
             },
             "example": {
               "error": {
-                "code": "request_timeout",
-                "message": "Request took too long to arrive."
+                "code": "rate_limited",
+                "message": "Too many requests."
+              }
+            }
+          }
+        }
+      },
+      "Unavailable": {
+        "description": "Já há 256 decisões em andamento, ou o limitador em memória está indisponível.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "error": {
+                "code": "unavailable",
+                "message": "Service is temporarily unavailable."
+              }
+            }
+          }
+        }
+      },
+      "DecisionTimeout": {
+        "description": "A decisão passou de 5 segundos, contando o tempo de chegada do corpo.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "error": {
+                "code": "decision_timeout",
+                "message": "Request took too long to arrive or to be decided."
               }
             }
           }

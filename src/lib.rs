@@ -9,7 +9,10 @@ mod auth;
 mod domain;
 mod error;
 mod handlers;
+mod metrics;
 mod models;
+mod rate_limit;
+mod runtime;
 mod server;
 mod services;
 mod state;
@@ -21,24 +24,42 @@ use axum::{
     Router,
 };
 
-use handlers::{chat, health::health, http};
+use handlers::{chat, health, http};
 
 #[cfg(debug_assertions)]
 pub use handlers::docs::dev_docs;
+pub use rate_limit::RateLimitConfig;
 pub use server::serve;
 pub use state::AppState;
 
 const MAX_BODY_BYTES: usize = 4096;
 
 pub fn app(state: AppState) -> Router {
-    // `layer` (not `route_layer`) so the fallback is authenticated too: without
-    // a valid key, an unknown route answers exactly like a real one.
-    let protected = Router::new()
+    // Decision routes, innermost first: the concurrency/timeout guard sits
+    // closest to the handler, the limiter runs once the caller is known.
+    let decisions = Router::new()
         .route("/v1/decisions/http", post(http::decide_http))
         .route(
             "/v1/decisions/chat",
             post(chat::decide_chat).layer(DefaultBodyLimit::max(chat::MAX_BODY_BYTES)),
         )
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            runtime::protect,
+        ))
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            rate_limit::enforce,
+        ));
+
+    // Scrapes are authenticated but do not consume decision capacity.
+    let metrics = Router::new().route("/metrics", get(metrics::export));
+
+    // `layer` (not `route_layer`) so the fallback is authenticated too: without
+    // a valid key, an unknown route answers exactly like a real one.
+    let protected = Router::new()
+        .merge(decisions)
+        .merge(metrics)
         .fallback(error::not_found)
         .method_not_allowed_fallback(error::method_not_allowed)
         .layer(middleware::from_fn_with_state(
@@ -47,13 +68,12 @@ pub fn app(state: AppState) -> Router {
         ));
 
     Router::new()
-        .route("/health", get(health))
-        .route("/live", get(health))
-        .route("/ready", get(health))
+        .route("/health", get(health::live))
+        .route("/live", get(health::live))
+        .route("/ready", get(health::ready))
         .method_not_allowed_fallback(error::method_not_allowed)
         .merge(protected)
         .layer(DefaultBodyLimit::max(MAX_BODY_BYTES))
-        .layer(middleware::from_fn(server::request_timeout))
         .with_state(state)
 }
 
@@ -65,7 +85,7 @@ mod tests {
     };
     use tower::ServiceExt;
 
-    use super::{app, error::AppError, AppState};
+    use super::{app, error::AppError, AppState, RateLimitConfig};
 
     fn test_app() -> axum::Router {
         app(
@@ -204,6 +224,11 @@ mod tests {
             .expect("response");
         assert_eq!(limited.status(), StatusCode::TOO_MANY_REQUESTS);
         assert!(limited.headers().contains_key("retry-after"));
+        let body = to_bytes(limited.into_body(), 4096).await.expect("body");
+        assert_eq!(
+            body,
+            r#"{"error":{"code":"rate_limited","message":"Too many requests."}}"#.as_bytes()
+        );
 
         let health = router
             .oneshot(
@@ -346,7 +371,7 @@ mod tests {
 
     #[tokio::test]
     async fn health_routes_answer_ok_and_reject_other_methods_in_the_error_format() {
-        for uri in ["/health", "/live", "/ready"] {
+        for uri in ["/health", "/live"] {
             let (status, body) = send(test_app(), "GET", uri, false).await;
             assert_eq!(status, StatusCode::OK, "{uri}");
             assert_eq!(body, r#"{"status":"ok"}"#, "{uri}");
@@ -354,6 +379,42 @@ mod tests {
             assert_eq!(status, StatusCode::METHOD_NOT_ALLOWED, "{uri}");
             assert!(body.contains(r#""code":"method_not_allowed""#), "{uri}");
         }
+
+        let (status, body) = send(test_app(), "GET", "/ready", false).await;
+        assert_eq!(status, StatusCode::OK);
+        assert_eq!(body, r#"{"status":"ready"}"#);
+        let (status, body) = send(test_app(), "POST", "/ready", false).await;
+        assert_eq!(status, StatusCode::METHOD_NOT_ALLOWED);
+        assert!(body.contains(r#""code":"method_not_allowed""#));
+    }
+
+    #[tokio::test]
+    async fn metrics_is_authenticated_and_does_not_spend_decision_capacity() {
+        let state = AppState::with_rate_limit(
+            "a".repeat(32),
+            vec![],
+            RateLimitConfig::per_minute(1).expect("valid limit"),
+        )
+        .expect("valid test config");
+        let router = app(state);
+
+        let (status, _) = send(router.clone(), "GET", "/metrics", false).await;
+        assert_eq!(status, StatusCode::UNAUTHORIZED);
+
+        let (status, body) = send(router.clone(), "GET", "/metrics", true).await;
+        assert_eq!(status, StatusCode::OK);
+        assert!(body.contains("voidgate_authenticated_decisions_total"));
+        assert!(
+            !body.contains("a".repeat(32).as_str()),
+            "metrics leak the key"
+        );
+
+        let (status, _) = send(router.clone(), "POST", "/v1/decisions/http", true).await;
+        assert_eq!(
+            status,
+            StatusCode::UNSUPPORTED_MEDIA_TYPE,
+            "the scrape must not consume the single allowed decision"
+        );
     }
 
     #[tokio::test]
@@ -410,6 +471,7 @@ mod tests {
             "/health",
             "/live",
             "/ready",
+            "/metrics",
             "/v1/decisions/http",
             "/v1/decisions/chat",
         ] {
@@ -417,7 +479,9 @@ mod tests {
         }
         for path in ["/v1/decisions/http", "/v1/decisions/chat"] {
             let responses = &spec["paths"][path]["post"]["responses"];
-            for status in ["200", "400", "401", "404", "405", "408", "413", "415"] {
+            for status in [
+                "200", "400", "401", "404", "405", "413", "415", "429", "503", "504",
+            ] {
                 assert!(responses[status].is_object(), "{path} is missing {status}");
             }
         }

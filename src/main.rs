@@ -1,12 +1,13 @@
 use std::{collections::HashMap, env, fs, io, net::SocketAddr, process::ExitCode};
 
-use voidgate_backend::{app, serve, AppState};
+use voidgate_backend::{app, serve, AppState, RateLimitConfig};
 
-const SETTINGS: [&str; 4] = [
+const SETTINGS: [&str; 5] = [
     "VOIDGATE_API_KEY",
     "VOIDGATE_DECOY_PATHS",
     "VOIDGATE_BIND",
     "VOIDGATE_DEV_DOCS",
+    "VOIDGATE_RATE_LIMIT_PER_MINUTE",
 ];
 
 #[tokio::main]
@@ -46,8 +47,12 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
         .filter(|path| !path.is_empty())
         .map(str::to_owned)
         .collect();
-    let rate_limit = match optional_env("VOIDGATE_RATE_LIMIT_PER_MINUTE")? {
-        Some(value) => RateLimitConfig::per_minute(value.parse::<u32>()?)?,
+    let rate_limit = match setting("VOIDGATE_RATE_LIMIT_PER_MINUTE")? {
+        Some(value) => RateLimitConfig::per_minute(
+            value
+                .parse::<u32>()
+                .map_err(|_| "VOIDGATE_RATE_LIMIT_PER_MINUTE must be a whole number")?,
+        )?,
         None => RateLimitConfig::default(),
     };
     let state = AppState::with_rate_limit(api_key, paths, rate_limit)?;
@@ -86,8 +91,40 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
     if dev_docs {
         eprintln!("dev docs: http://{address}/docs");
     }
-    serve(listener, router).await?;
+    serve(listener, router, shutdown_signal()).await?;
     Ok(())
+}
+
+/// Resolves on Ctrl+C, or SIGTERM where the platform has it.
+async fn shutdown_signal() {
+    #[cfg(unix)]
+    {
+        let mut terminate =
+            match tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()) {
+                Ok(signal) => signal,
+                Err(error) => {
+                    eprintln!("failed to register SIGTERM handler: {error}");
+                    std::process::exit(1);
+                }
+            };
+        tokio::select! {
+            result = tokio::signal::ctrl_c() => {
+                if let Err(error) = result {
+                    eprintln!("failed to receive Ctrl+C: {error}");
+                    std::process::exit(1);
+                }
+            }
+            _ = terminate.recv() => {}
+        }
+    }
+
+    #[cfg(not(unix))]
+    {
+        if let Err(error) = tokio::signal::ctrl_c().await {
+            eprintln!("failed to receive Ctrl+C: {error}");
+            std::process::exit(1);
+        }
+    }
 }
 
 /// Process environment first, then the `.env` file.

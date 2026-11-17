@@ -23,12 +23,14 @@ pub(crate) enum AppError {
     InvalidBody,
     PayloadTooLarge,
     UnsupportedMediaType,
-    RequestTimeout,
+    RateLimited,
+    Unavailable,
+    DecisionTimeout,
 }
 
 impl AppError {
     #[cfg(test)]
-    pub(crate) const ALL: [Self; 8] = [
+    pub(crate) const ALL: [Self; 10] = [
         Self::Unauthorized,
         Self::NotFound,
         Self::MethodNotAllowed,
@@ -36,7 +38,9 @@ impl AppError {
         Self::InvalidBody,
         Self::PayloadTooLarge,
         Self::UnsupportedMediaType,
-        Self::RequestTimeout,
+        Self::RateLimited,
+        Self::Unavailable,
+        Self::DecisionTimeout,
     ];
 
     #[cfg(test)]
@@ -77,10 +81,20 @@ impl AppError {
                 "unsupported_media_type",
                 "Content-Type must be application/json.",
             ),
-            Self::RequestTimeout => (
-                StatusCode::REQUEST_TIMEOUT,
-                "request_timeout",
-                "Request took too long to arrive.",
+            Self::RateLimited => (
+                StatusCode::TOO_MANY_REQUESTS,
+                "rate_limited",
+                "Too many requests.",
+            ),
+            Self::Unavailable => (
+                StatusCode::SERVICE_UNAVAILABLE,
+                "unavailable",
+                "Service is temporarily unavailable.",
+            ),
+            Self::DecisionTimeout => (
+                StatusCode::GATEWAY_TIMEOUT,
+                "decision_timeout",
+                "Request took too long to arrive or to be decided.",
             ),
         }
     }

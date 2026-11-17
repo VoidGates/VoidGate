@@ -2,13 +2,12 @@ use std::time::{Duration, Instant};
 
 use axum::{
     extract::{Request, State},
-    http::StatusCode,
     middleware::Next,
     response::{IntoResponse, Response},
 };
 use tokio::time::timeout;
 
-use crate::AppState;
+use crate::{error::AppError, AppState};
 
 const DECISION_TIMEOUT: Duration = Duration::from_secs(5);
 
@@ -16,7 +15,7 @@ pub(crate) async fn protect(
     State(state): State<AppState>,
     request: Request,
     next: Next,
-) -> Result<Response, StatusCode> {
+) -> Result<Response, AppError> {
     let _permit = state
         .decision_slots
         .clone()
@@ -26,7 +25,7 @@ pub(crate) async fn protect(
                 .metrics
                 .capacity_rejections
                 .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-            StatusCode::SERVICE_UNAVAILABLE
+            AppError::Unavailable
         })?;
 
     let started = Instant::now();
@@ -51,7 +50,7 @@ pub(crate) async fn protect(
                 .metrics
                 .decision_errors
                 .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-            Ok(StatusCode::GATEWAY_TIMEOUT.into_response())
+            Ok(AppError::DecisionTimeout.into_response())
         }
     }
 }

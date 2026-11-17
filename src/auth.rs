@@ -58,6 +58,10 @@ pub(crate) async fn authorize(
         .key_verifier
         .verify(request.headers().get("x-voidgate-key"))
     {
+        state
+            .metrics
+            .auth_rejections
+            .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         return Err(AppError::Unauthorized);
     }
     request

@@ -6,7 +6,6 @@
 
 use std::{
     collections::HashMap,
-    str::FromStr,
     sync::Mutex,
     time::{Duration, Instant},
 };
@@ -84,6 +83,7 @@ impl RateLimiter {
         self.check_locked(&mut buckets, client, Instant::now())
     }
 
+    #[cfg(test)]
     fn check_at(&self, client: ClientKey, now: Instant) -> Result<Decision, StatusCode> {
         let mut buckets = self
             .buckets
@@ -169,12 +169,10 @@ mod tests {
 
     use axum::http::StatusCode;
 
-    use crate::auth::ClientKey;
-
     use super::{Decision, RateLimitConfig, RateLimiter};
 
-    fn key(value: u8) -> ClientKey {
-        ClientKey([value; 32])
+    fn key(value: u8) -> crate::auth::ClientKey {
+        crate::auth::ClientKey::test_key(value)
     }
 
     #[test]

@@ -12,6 +12,13 @@ use crate::AppState;
 #[derive(Clone, Copy, Hash, PartialEq, Eq)]
 pub(crate) struct ClientKey([u8; 32]);
 
+impl ClientKey {
+    #[cfg(test)]
+    pub(crate) fn test_key(value: u8) -> Self {
+        Self([value; 32])
+    }
+}
+
 #[derive(Clone)]
 pub(crate) struct ApiKeyVerifier([u8; 32]);
 

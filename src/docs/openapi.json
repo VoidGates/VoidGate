@@ -3,82 +3,82 @@
   "info": {
     "title": "VoidGate backend",
     "version": "0.1.0",
-    "description": "API de decisão do VoidGate. Clique em **Authorize** e informe o valor de `VOIDGATE_API_KEY`.\n\nAs respostas são para o gateway que integra a API. Nunca repasse `reason_code`, `reason_codes`, `findings` ou o corpo de um erro ao cliente final."
+    "description": "API de decisão do VoidGate. Clique em **Authorize** e informe o valor de `VOIDGATE_API_KEY`.\n\nAs respostas são para o gateway que integra a API. Nunca repasse `reason_code`, `reason_codes`, `findings` ou o corpo de um erro ao cliente final.\n\nUma requisição tem 15 segundos para chegar inteira; depois disso a resposta é `408`."
   },
   "tags": [
-    { "name": "Saúde", "description": "Rotas públicas de verificação do processo." },
-    { "name": "Decisões", "description": "Rotas autenticadas com `x-voidgate-key`." }
+    {
+      "name": "Saúde",
+      "description": "Rotas públicas de verificação do processo."
+    },
+    {
+      "name": "Decisões",
+      "description": "Rotas autenticadas com `x-voidgate-key`."
+    }
   ],
   "paths": {
     "/health": {
       "get": {
-        "tags": ["Saúde"],
+        "tags": [
+          "Saúde"
+        ],
         "summary": "Processo no ar",
-        "responses": { "200": { "$ref": "#/components/responses/Health" } }
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Health"
+          }
+        }
       }
     },
     "/live": {
       "get": {
-        "tags": ["Saúde"],
+        "tags": [
+          "Saúde"
+        ],
         "summary": "Liveness",
-        "responses": { "200": { "$ref": "#/components/responses/Health" } }
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Health"
+          }
+        }
       }
     },
     "/ready": {
       "get": {
-        "tags": ["Saúde"],
+        "tags": [
+          "Saúde"
+        ],
         "summary": "Readiness (ainda não testa dependências externas)",
-        "responses": { "200": { "$ref": "#/components/responses/Health" } }
+        "responses": {
+          "200": {
+            "$ref": "#/components/responses/Health"
+          }
+        }
       }
     },
     "/v1/decisions/http": {
       "post": {
-        "tags": ["Decisões"],
+        "tags": [
+          "Decisões"
+        ],
         "summary": "Decide se um caminho HTTP vai para a isca",
         "description": "Corpo limitado a 4 KiB.",
-        "security": [{ "ApiKey": [] }],
+        "security": [
+          {
+            "ApiKey": []
+          }
+        ],
         "requestBody": {
           "required": true,
           "content": {
             "application/json": {
-              "schema": { "$ref": "#/components/schemas/HttpDecisionRequest" },
-              "example": { "method": "GET", "path": "/internal/backup" }
-            }
-          }
-        },
-        "responses": {
-          "200": {
-            "description": "Decisão",
-            "content": {
-              "application/json": {
-                "schema": { "$ref": "#/components/schemas/HttpDecisionResponse" },
-                "examples": {
-                  "isca": { "value": { "action": "decoy", "reason_code": "registered_decoy_path" } },
-                  "livre": { "value": { "action": "allow", "reason_code": "no_matching_rule" } }
-                }
+              "schema": {
+                "$ref": "#/components/schemas/HttpDecisionRequest"
+              },
+              "example": {
+                "method": "GET",
+                "path": "/internal/backup"
               }
             }
-          },
-          "400": { "$ref": "#/components/responses/BadRequest" },
-          "401": { "$ref": "#/components/responses/Unauthorized" },
-          "413": { "$ref": "#/components/responses/PayloadTooLarge" },
-          "415": { "$ref": "#/components/responses/UnsupportedMediaType" }
-        }
-      }
-    },
-    "/v1/decisions/chat": {
-      "post": {
-        "tags": ["Decisões"],
-        "summary": "Decide se uma mensagem de chat pode seguir",
-        "description": "Corpo limitado a 32 KiB e `content` a 16 KiB. O conteúdo nunca aparece na resposta; `start` e `end` são offsets em bytes (fim exclusivo).",
-        "security": [{ "ApiKey": [] }],
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": { "$ref": "#/components/schemas/ChatDecisionRequest" },
-              "example": { "role": "user", "content": "Olá, tudo bem?" }
-            }
           }
         },
         "responses": {
@@ -86,89 +86,293 @@
             "description": "Decisão",
             "content": {
               "application/json": {
-                "schema": { "$ref": "#/components/schemas/ChatDecisionResponse" },
+                "schema": {
+                  "$ref": "#/components/schemas/HttpDecisionResponse"
+                },
                 "examples": {
-                  "livre": { "value": { "action": "allow", "reason_codes": [], "findings": [] } },
-                  "bloqueada": {
+                  "isca": {
                     "value": {
-                      "action": "block",
-                      "reason_codes": ["content.invisible_unicode"],
-                      "findings": [
-                        { "code": "content.invisible_unicode", "detector": "invisible_unicode", "start": 5, "end": 8 }
-                      ]
+                      "action": "decoy",
+                      "reason_code": "registered_decoy_path"
+                    }
+                  },
+                  "livre": {
+                    "value": {
+                      "action": "allow",
+                      "reason_code": "no_matching_rule"
                     }
                   }
                 }
               }
             }
           },
-          "400": { "$ref": "#/components/responses/BadRequest" },
-          "401": { "$ref": "#/components/responses/Unauthorized" },
-          "413": { "$ref": "#/components/responses/PayloadTooLarge" },
-          "415": { "$ref": "#/components/responses/UnsupportedMediaType" }
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "408": {
+            "$ref": "#/components/responses/RequestTimeout"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          }
+        }
+      }
+    },
+    "/v1/decisions/chat": {
+      "post": {
+        "tags": [
+          "Decisões"
+        ],
+        "summary": "Decide se uma mensagem de chat pode seguir",
+        "description": "Corpo limitado a 100 KiB e `content` a 16 KiB em UTF-8. O conteúdo nunca aparece na resposta; `start` e `end` são offsets em bytes (fim exclusivo). Caracteres ocultos seguidos formam um único item em `findings`. A lista traz no máximo 100 itens; `truncated` indica que havia mais.",
+        "security": [
+          {
+            "ApiKey": []
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/ChatDecisionRequest"
+              },
+              "example": {
+                "role": "user",
+                "content": "Olá, tudo bem?"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Decisão",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ChatDecisionResponse"
+                },
+                "examples": {
+                  "livre": {
+                    "value": {
+                      "action": "allow",
+                      "reason_codes": [],
+                      "findings": [],
+                      "truncated": false
+                    }
+                  },
+                  "bloqueada": {
+                    "value": {
+                      "action": "block",
+                      "reason_codes": [
+                        "content.invisible_unicode"
+                      ],
+                      "findings": [
+                        {
+                          "code": "content.invisible_unicode",
+                          "detector": "invisible_unicode",
+                          "start": 5,
+                          "end": 8
+                        }
+                      ],
+                      "truncated": false
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "$ref": "#/components/responses/BadRequest"
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "404": {
+            "$ref": "#/components/responses/NotFound"
+          },
+          "405": {
+            "$ref": "#/components/responses/MethodNotAllowed"
+          },
+          "408": {
+            "$ref": "#/components/responses/RequestTimeout"
+          },
+          "413": {
+            "$ref": "#/components/responses/PayloadTooLarge"
+          },
+          "415": {
+            "$ref": "#/components/responses/UnsupportedMediaType"
+          }
         }
       }
     }
   },
   "components": {
     "securitySchemes": {
-      "ApiKey": { "type": "apiKey", "in": "header", "name": "x-voidgate-key" }
+      "ApiKey": {
+        "type": "apiKey",
+        "in": "header",
+        "name": "x-voidgate-key"
+      }
     },
     "schemas": {
       "HttpDecisionRequest": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["method", "path"],
+        "required": [
+          "method",
+          "path"
+        ],
         "properties": {
-          "method": { "type": "string", "enum": ["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"] },
-          "path": { "type": "string", "description": "Caminho absoluto, sem query string." }
+          "method": {
+            "type": "string",
+            "enum": [
+              "GET",
+              "HEAD",
+              "POST",
+              "PUT",
+              "PATCH",
+              "DELETE",
+              "OPTIONS"
+            ]
+          },
+          "path": {
+            "type": "string",
+            "maxLength": 2048,
+            "pattern": "^/[!-~]*$",
+            "description": "Caminho absoluto de até 2048 bytes, só com caracteres ASCII visíveis. Não pode conter `?`, `#`, `%`, `\\`, `//` nem segmentos `.` ou `..`. Normalize e decodifique o caminho antes de perguntar: a comparação com as iscas é exata."
+          }
         }
       },
       "HttpDecisionResponse": {
         "type": "object",
-        "required": ["action", "reason_code"],
+        "required": [
+          "action",
+          "reason_code"
+        ],
         "properties": {
-          "action": { "type": "string", "enum": ["allow", "decoy"] },
-          "reason_code": { "type": "string", "enum": ["no_matching_rule", "registered_decoy_path"] }
+          "action": {
+            "type": "string",
+            "enum": [
+              "allow",
+              "decoy"
+            ]
+          },
+          "reason_code": {
+            "type": "string",
+            "enum": [
+              "no_matching_rule",
+              "registered_decoy_path"
+            ]
+          }
         }
       },
       "ChatDecisionRequest": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["role", "content"],
+        "required": [
+          "role",
+          "content"
+        ],
         "properties": {
-          "role": { "type": "string", "enum": ["user", "system", "assistant"] },
-          "content": { "type": "string", "description": "Texto UTF-8 de até 16 KiB." }
+          "role": {
+            "type": "string",
+            "enum": [
+              "user",
+              "system",
+              "assistant"
+            ]
+          },
+          "content": {
+            "type": "string",
+            "description": "Texto de até 16 KiB (16384 bytes em UTF-8)."
+          }
         }
       },
       "ChatDecisionResponse": {
         "type": "object",
-        "required": ["action", "reason_codes", "findings"],
+        "required": [
+          "action",
+          "reason_codes",
+          "findings",
+          "truncated"
+        ],
         "properties": {
-          "action": { "type": "string", "enum": ["allow", "block"] },
-          "reason_codes": { "type": "array", "items": { "type": "string" } },
+          "action": {
+            "type": "string",
+            "enum": [
+              "allow",
+              "block"
+            ]
+          },
+          "reason_codes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "content.invisible_unicode"
+              ]
+            }
+          },
           "findings": {
             "type": "array",
             "items": {
               "type": "object",
-              "required": ["code", "detector", "start", "end"],
+              "required": [
+                "code",
+                "detector",
+                "start",
+                "end"
+              ],
               "properties": {
-                "code": { "type": "string" },
-                "detector": { "type": "string" },
-                "start": { "type": "integer", "minimum": 0 },
-                "end": { "type": "integer", "minimum": 0 }
+                "code": {
+                  "type": "string"
+                },
+                "detector": {
+                  "type": "string"
+                },
+                "start": {
+                  "type": "integer",
+                  "minimum": 0
+                },
+                "end": {
+                  "type": "integer",
+                  "minimum": 0
+                }
               }
-            }
+            },
+            "maxItems": 100
+          },
+          "truncated": {
+            "type": "boolean",
+            "description": "`true` quando havia mais de 100 ocorrências; a decisão considera todas."
           }
         }
       },
       "Error": {
         "type": "object",
-        "required": ["error"],
+        "required": [
+          "error"
+        ],
         "properties": {
           "error": {
             "type": "object",
-            "required": ["code", "message"],
+            "required": [
+              "code",
+              "message"
+            ],
             "properties": {
               "code": {
                 "type": "string",
@@ -179,10 +383,13 @@
                   "invalid_json",
                   "invalid_body",
                   "payload_too_large",
-                  "unsupported_media_type"
+                  "unsupported_media_type",
+                  "request_timeout"
                 ]
               },
-              "message": { "type": "string" }
+              "message": {
+                "type": "string"
+              }
             }
           }
         }
@@ -191,14 +398,27 @@
     "responses": {
       "Health": {
         "description": "Processo no ar",
-        "content": { "application/json": { "example": { "status": "ok" } } }
+        "content": {
+          "application/json": {
+            "example": {
+              "status": "ok"
+            }
+          }
+        }
       },
       "BadRequest": {
         "description": "`invalid_json` (JSON malformado) ou `invalid_body` (campo ausente, extra ou com valor fora do contrato)",
         "content": {
           "application/json": {
-            "schema": { "$ref": "#/components/schemas/Error" },
-            "example": { "error": { "code": "invalid_body", "message": "Request body does not match the documented contract." } }
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "error": {
+                "code": "invalid_body",
+                "message": "Request body does not match the documented contract."
+              }
+            }
           }
         }
       },
@@ -206,8 +426,15 @@
         "description": "Chave ausente ou inválida. Sem chave válida, esta é a resposta de qualquer rota fora as de saúde.",
         "content": {
           "application/json": {
-            "schema": { "$ref": "#/components/schemas/Error" },
-            "example": { "error": { "code": "unauthorized", "message": "Missing or invalid credentials." } }
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "error": {
+                "code": "unauthorized",
+                "message": "Missing or invalid credentials."
+              }
+            }
           }
         }
       },
@@ -215,8 +442,15 @@
         "description": "Corpo ou `content` acima do limite",
         "content": {
           "application/json": {
-            "schema": { "$ref": "#/components/schemas/Error" },
-            "example": { "error": { "code": "payload_too_large", "message": "Request exceeds the documented size limit." } }
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "error": {
+                "code": "payload_too_large",
+                "message": "Request exceeds the documented size limit."
+              }
+            }
           }
         }
       },
@@ -224,8 +458,63 @@
         "description": "Sem `Content-Type: application/json`",
         "content": {
           "application/json": {
-            "schema": { "$ref": "#/components/schemas/Error" },
-            "example": { "error": { "code": "unsupported_media_type", "message": "Content-Type must be application/json." } }
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "error": {
+                "code": "unsupported_media_type",
+                "message": "Content-Type must be application/json."
+              }
+            }
+          }
+        }
+      },
+      "NotFound": {
+        "description": "Rota desconhecida. Só aparece com chave válida.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "error": {
+                "code": "not_found",
+                "message": "Unknown route."
+              }
+            }
+          }
+        }
+      },
+      "MethodNotAllowed": {
+        "description": "Método não aceito pela rota. Só aparece com chave válida.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "error": {
+                "code": "method_not_allowed",
+                "message": "Method not supported for this route."
+              }
+            }
+          }
+        }
+      },
+      "RequestTimeout": {
+        "description": "O corpo demorou mais de 15 segundos para chegar.",
+        "content": {
+          "application/json": {
+            "schema": {
+              "$ref": "#/components/schemas/Error"
+            },
+            "example": {
+              "error": {
+                "code": "request_timeout",
+                "message": "Request took too long to arrive."
+              }
+            }
           }
         }
       }

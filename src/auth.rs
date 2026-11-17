@@ -17,6 +17,12 @@ impl ApiKeyVerifier {
         if !(32..=128).contains(&api_key.len()) {
             return Err("VOIDGATE_API_KEY must contain 32 to 128 bytes".into());
         }
+        // A key no header can carry would start a service that rejects everyone.
+        if api_key != api_key.trim() || HeaderValue::from_str(api_key).is_err() {
+            return Err(
+                "VOIDGATE_API_KEY must not contain control characters or surrounding spaces".into(),
+            );
+        }
         Ok(Self(Sha256::digest(api_key.as_bytes()).into()))
     }
 

@@ -27,4 +27,6 @@ pub(crate) struct ChatDecisionResponse {
     pub(crate) action: &'static str,
     pub(crate) reason_codes: Vec<&'static str>,
     pub(crate) findings: Vec<Finding>,
+    /// True when there were more findings than `findings` lists.
+    pub(crate) truncated: bool,
 }

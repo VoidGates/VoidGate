@@ -7,6 +7,9 @@ use crate::{
 /// Maximum size of `content`, in UTF-8 bytes.
 pub(crate) const MAX_CONTENT_BYTES: usize = 16 * 1024;
 
+/// Findings listed in one response; the decision still counts all of them.
+pub(crate) const MAX_FINDINGS: usize = 100;
+
 const ACTION_ALLOW: &str = "allow";
 const ACTION_BLOCK: &str = "block";
 
@@ -18,7 +21,7 @@ pub(crate) fn decide(
         return Err(AppError::PayloadTooLarge);
     }
 
-    let findings: Vec<Finding> = detectors
+    let mut findings: Vec<Finding> = detectors
         .iter()
         .flat_map(|detector| detector.scan(&input.content))
         .collect();
@@ -35,9 +38,14 @@ pub(crate) fn decide(
         ACTION_BLOCK
     };
 
+    // Bounds the response: without it a 16 KiB message could ask for one of ~400 KiB.
+    let truncated = findings.len() > MAX_FINDINGS;
+    findings.truncate(MAX_FINDINGS);
+
     Ok(ChatDecisionResponse {
         action,
         reason_codes,
         findings,
+        truncated,
     })
 }

@@ -23,9 +23,27 @@ pub(crate) enum AppError {
     InvalidBody,
     PayloadTooLarge,
     UnsupportedMediaType,
+    RequestTimeout,
 }
 
 impl AppError {
+    #[cfg(test)]
+    pub(crate) const ALL: [Self; 8] = [
+        Self::Unauthorized,
+        Self::NotFound,
+        Self::MethodNotAllowed,
+        Self::InvalidJson,
+        Self::InvalidBody,
+        Self::PayloadTooLarge,
+        Self::UnsupportedMediaType,
+        Self::RequestTimeout,
+    ];
+
+    #[cfg(test)]
+    pub(crate) fn code(self) -> &'static str {
+        self.parts().1
+    }
+
     fn parts(self) -> (StatusCode, &'static str, &'static str) {
         match self {
             Self::Unauthorized => (
@@ -58,6 +76,11 @@ impl AppError {
                 StatusCode::UNSUPPORTED_MEDIA_TYPE,
                 "unsupported_media_type",
                 "Content-Type must be application/json.",
+            ),
+            Self::RequestTimeout => (
+                StatusCode::REQUEST_TIMEOUT,
+                "request_timeout",
+                "Request took too long to arrive.",
             ),
         }
     }

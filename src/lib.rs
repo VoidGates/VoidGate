@@ -10,6 +10,7 @@ mod domain;
 mod error;
 mod handlers;
 mod models;
+mod server;
 mod services;
 mod state;
 
@@ -22,7 +23,9 @@ use axum::{
 
 use handlers::{chat, health::health, http};
 
+#[cfg(debug_assertions)]
 pub use handlers::docs::dev_docs;
+pub use server::serve;
 pub use state::AppState;
 
 const MAX_BODY_BYTES: usize = 4096;
@@ -50,6 +53,7 @@ pub fn app(state: AppState) -> Router {
         .method_not_allowed_fallback(error::method_not_allowed)
         .merge(protected)
         .layer(DefaultBodyLimit::max(MAX_BODY_BYTES))
+        .layer(middleware::from_fn(server::request_timeout))
         .with_state(state)
 }
 
@@ -61,7 +65,7 @@ mod tests {
     };
     use tower::ServiceExt;
 
-    use super::{app, dev_docs, AppState};
+    use super::{app, error::AppError, AppState};
 
     fn test_app() -> axum::Router {
         app(
@@ -230,15 +234,115 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn dev_docs_serve_ui_and_a_spec_covering_every_route() {
-        let router = || test_app().merge(dev_docs());
-        let (status, body) = send(router(), "GET", "/docs", false).await;
-        assert_eq!(status, StatusCode::OK);
-        assert!(body.contains("swagger-ui"));
+    async fn without_key_no_request_shape_changes_the_answer() {
+        let wrong = "b".repeat(32);
+        for (uri, key, content_type, body) in [
+            (
+                "/v1/decisions/chat",
+                None,
+                "application/json",
+                "{}".to_owned(),
+            ),
+            (
+                "/v1/decisions/chat",
+                Some(&wrong),
+                "text/plain",
+                "x".to_owned(),
+            ),
+            ("/v1/decisions/http", None, "text/plain", "x".to_owned()),
+            (
+                "/v1/decisions/http",
+                None,
+                "application/json",
+                "x".repeat(200_000),
+            ),
+            (
+                "/v1/decisions/nope",
+                Some(&wrong),
+                "application/json",
+                "{}".to_owned(),
+            ),
+        ] {
+            let mut request = Request::builder()
+                .method("POST")
+                .uri(uri)
+                .header("content-type", content_type);
+            if let Some(key) = key {
+                request = request.header("x-voidgate-key", key);
+            }
+            let response = test_app()
+                .oneshot(request.body(Body::from(body)).expect("request"))
+                .await
+                .expect("response");
+            assert_eq!(response.status(), StatusCode::UNAUTHORIZED, "{uri}");
+            assert!(response.headers().get("allow").is_none(), "{uri}");
+            let body = to_bytes(response.into_body(), 4096).await.expect("body");
+            assert_eq!(body, UNAUTHORIZED.as_bytes(), "{uri}");
+        }
+    }
 
-        let (status, body) = send(router(), "GET", "/docs/openapi.json", false).await;
-        assert_eq!(status, StatusCode::OK);
-        let spec: serde_json::Value = serde_json::from_str(&body).expect("valid openapi json");
+    #[tokio::test]
+    async fn health_routes_answer_ok_and_reject_other_methods_in_the_error_format() {
+        for uri in ["/health", "/live", "/ready"] {
+            let (status, body) = send(test_app(), "GET", uri, false).await;
+            assert_eq!(status, StatusCode::OK, "{uri}");
+            assert_eq!(body, r#"{"status":"ok"}"#, "{uri}");
+            let (status, body) = send(test_app(), "POST", uri, false).await;
+            assert_eq!(status, StatusCode::METHOD_NOT_ALLOWED, "{uri}");
+            assert!(body.contains(r#""code":"method_not_allowed""#), "{uri}");
+        }
+    }
+
+    #[tokio::test]
+    async fn rejects_duplicate_json_keys_and_missing_content_type() {
+        let key = "a".repeat(32);
+        let (status, body) = decision(
+            r#"{"method":"GET","path":"/a","path":"/internal/backup"}"#,
+            Some(&key),
+        )
+        .await;
+        assert_eq!(status, StatusCode::BAD_REQUEST);
+        assert_eq!(body, INVALID_BODY);
+
+        let request = Request::builder()
+            .method("POST")
+            .uri("/v1/decisions/http")
+            .header("x-voidgate-key", &key)
+            .body(Body::from(r#"{"method":"GET","path":"/a"}"#))
+            .expect("request");
+        let response = test_app().oneshot(request).await.expect("response");
+        assert_eq!(response.status(), StatusCode::UNSUPPORTED_MEDIA_TYPE);
+    }
+
+    #[test]
+    fn key_must_be_32_to_128_bytes_that_a_header_can_carry() {
+        let new = |key: String| AppState::new(key, vec![]);
+        assert!(new("a".repeat(31)).is_err());
+        assert!(new("a".repeat(32)).is_ok());
+        assert!(new("a".repeat(128)).is_ok());
+        assert!(new("a".repeat(129)).is_err());
+        assert!(new(format!("{} ", "a".repeat(32))).is_err());
+        assert!(new(format!(" {}", "a".repeat(32))).is_err());
+        assert!(new(format!("{}\n", "a".repeat(32))).is_err());
+        assert!(new(format!("{}\u{0007}", "a".repeat(32))).is_err());
+    }
+
+    #[test]
+    fn spec_lists_exactly_the_error_codes_and_statuses_the_code_can_return() {
+        let spec: serde_json::Value =
+            serde_json::from_str(include_str!("docs/openapi.json")).expect("valid openapi json");
+        let mut documented: Vec<&str> = spec["components"]["schemas"]["Error"]["properties"]
+            ["error"]["properties"]["code"]["enum"]
+            .as_array()
+            .expect("error code enum")
+            .iter()
+            .filter_map(|code| code.as_str())
+            .collect();
+        let mut actual: Vec<&str> = AppError::ALL.iter().map(|error| error.code()).collect();
+        documented.sort_unstable();
+        actual.sort_unstable();
+        assert_eq!(documented, actual);
+
         for path in [
             "/health",
             "/live",
@@ -247,6 +351,79 @@ mod tests {
             "/v1/decisions/chat",
         ] {
             assert!(spec["paths"][path].is_object(), "spec is missing {path}");
+        }
+        for path in ["/v1/decisions/http", "/v1/decisions/chat"] {
+            let responses = &spec["paths"][path]["post"]["responses"];
+            for status in ["200", "400", "401", "404", "405", "408", "413", "415"] {
+                assert!(responses[status].is_object(), "{path} is missing {status}");
+            }
+        }
+    }
+
+    #[cfg(debug_assertions)]
+    mod dev_docs {
+        use axum::{
+            body::{to_bytes, Body},
+            http::{Request, StatusCode},
+        };
+        use tower::ServiceExt;
+
+        use super::{test_app, UNAUTHORIZED};
+        use crate::dev_docs;
+
+        async fn docs(method: &str, uri: &str, host: &str) -> (StatusCode, Option<String>, String) {
+            let request = Request::builder()
+                .method(method)
+                .uri(uri)
+                .header("host", host)
+                .body(Body::empty())
+                .expect("request");
+            let response = test_app()
+                .merge(dev_docs())
+                .oneshot(request)
+                .await
+                .expect("response");
+            let status = response.status();
+            let csp = response
+                .headers()
+                .get("content-security-policy")
+                .and_then(|value| value.to_str().ok())
+                .map(str::to_owned);
+            let body = to_bytes(response.into_body(), 64 * 1024)
+                .await
+                .expect("body");
+            (status, csp, String::from_utf8(body.to_vec()).expect("utf8"))
+        }
+
+        #[tokio::test]
+        async fn serves_ui_with_csp_and_a_valid_spec_to_local_callers() {
+            let (status, csp, body) = docs("GET", "/docs", "127.0.0.1:8080").await;
+            assert_eq!(status, StatusCode::OK);
+            assert!(body.contains("swagger-ui"));
+            let csp = csp.expect("content-security-policy header");
+            assert!(csp.contains("default-src 'none'") && csp.contains("frame-ancestors 'none'"));
+
+            let (status, _, body) = docs("GET", "/docs/openapi.json", "localhost:8080").await;
+            assert_eq!(status, StatusCode::OK);
+            assert!(serde_json::from_str::<serde_json::Value>(&body).is_ok());
+        }
+
+        #[tokio::test]
+        async fn answers_like_a_missing_route_when_the_host_is_not_this_machine() {
+            for host in ["api.example.com", "attacker.example:8080", "10.0.0.5:8080"] {
+                for uri in ["/docs", "/docs/openapi.json"] {
+                    let (status, _, body) = docs("GET", uri, host).await;
+                    assert_eq!(status, StatusCode::UNAUTHORIZED, "{host} {uri}");
+                    assert_eq!(body, UNAUTHORIZED, "{host} {uri}");
+                }
+            }
+        }
+
+        #[tokio::test]
+        async fn other_methods_use_the_error_format() {
+            let (status, _, body) = docs("POST", "/docs", "127.0.0.1:8080").await;
+            assert_eq!(status, StatusCode::METHOD_NOT_ALLOWED);
+            assert!(body.contains(r#""code":"method_not_allowed""#));
         }
     }
 }

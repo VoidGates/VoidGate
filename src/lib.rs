@@ -2,6 +2,7 @@ mod auth;
 mod chat;
 mod detectors;
 mod policy;
+mod rate_limit;
 
 use std::sync::Arc;
 
@@ -17,6 +18,8 @@ use serde::{Deserialize, Serialize};
 use auth::{authorize, ApiKeyVerifier};
 use detectors::Detector;
 use policy::{valid_path, Decision, ExactPathPolicy};
+pub use rate_limit::RateLimitConfig;
+use rate_limit::RateLimiter;
 
 const MAX_BODY_BYTES: usize = 4096;
 
@@ -25,14 +28,24 @@ pub struct AppState {
     key_verifier: ApiKeyVerifier,
     policy: Arc<ExactPathPolicy>,
     detectors: Arc<Vec<Box<dyn Detector>>>,
+    rate_limiter: Arc<RateLimiter>,
 }
 
 impl AppState {
     pub fn new(api_key: String, decoy_paths: Vec<String>) -> Result<Self, String> {
+        Self::with_rate_limit(api_key, decoy_paths, RateLimitConfig::default())
+    }
+
+    pub fn with_rate_limit(
+        api_key: String,
+        decoy_paths: Vec<String>,
+        rate_limit: RateLimitConfig,
+    ) -> Result<Self, String> {
         Ok(Self {
             key_verifier: ApiKeyVerifier::new(&api_key)?,
             policy: Arc::new(ExactPathPolicy::new(decoy_paths)?),
             detectors: Arc::new(detectors::default_detectors()),
+            rate_limiter: Arc::new(RateLimiter::new(rate_limit)),
         })
     }
 }
@@ -44,6 +57,7 @@ pub fn app(state: AppState) -> Router {
             "/v1/decisions/chat",
             post(chat::decide_chat).layer(DefaultBodyLimit::max(chat::MAX_BODY_BYTES)),
         )
+        .route_layer(middleware::from_fn_with_state(state.clone(), rate_limit::enforce))
         .route_layer(middleware::from_fn_with_state(state.clone(), authorize));
 
     Router::new()
@@ -111,7 +125,7 @@ mod tests {
     };
     use tower::ServiceExt;
 
-    use super::{app, AppState};
+    use super::{app, AppState, RateLimitConfig};
 
     fn test_app() -> axum::Router {
         app(
@@ -198,6 +212,64 @@ mod tests {
             decision(&body, Some(&"a".repeat(32))).await.0,
             StatusCode::PAYLOAD_TOO_LARGE
         );
+    }
+
+    #[tokio::test]
+    async fn limits_authenticated_decisions_without_affecting_health() {
+        let state = AppState::with_rate_limit(
+            "a".repeat(32),
+            vec![],
+            RateLimitConfig::per_minute(2).expect("valid limit"),
+        )
+        .expect("valid test config");
+        let router = app(state);
+        let request = |key: Option<&str>| {
+            let mut builder = Request::builder()
+                .method("POST")
+                .uri("/v1/decisions/http")
+                .header("content-type", "application/json");
+            if let Some(key) = key {
+                builder = builder.header("x-voidgate-key", key);
+            }
+            builder
+                .body(Body::from(r#"{"method":"GET","path":"/public"}"#))
+                .expect("request")
+        };
+
+        assert_eq!(
+            router.clone().oneshot(request(None)).await.expect("response").status(),
+            StatusCode::UNAUTHORIZED
+        );
+        let key = "a".repeat(32);
+        for _ in 0..2 {
+            assert_eq!(
+                router
+                    .clone()
+                    .oneshot(request(Some(&key)))
+                    .await
+                    .expect("response")
+                    .status(),
+                StatusCode::OK
+            );
+        }
+        let limited = router
+            .clone()
+            .oneshot(request(Some(&key)))
+            .await
+            .expect("response");
+        assert_eq!(limited.status(), StatusCode::TOO_MANY_REQUESTS);
+        assert!(limited.headers().contains_key("retry-after"));
+
+        let health = router
+            .oneshot(
+                Request::builder()
+                    .uri("/health")
+                    .body(Body::empty())
+                    .expect("request"),
+            )
+            .await
+            .expect("response");
+        assert_eq!(health.status(), StatusCode::OK);
     }
 
     #[test]

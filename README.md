@@ -18,6 +18,7 @@ Defina as variáveis no ambiente do processo antes de executar. O arquivo `.env.
 | `VOIDGATE_API_KEY` | Sim | Chave enviada no cabeçalho `x-voidgate-key` da rota de decisão. |
 | `VOIDGATE_DECOY_PATHS` | Não | Caminhos exatos separados por vírgula; padrão: nenhum. |
 | `VOIDGATE_BIND` | Não | Endereço de escuta; padrão: `127.0.0.1:8080`. |
+| `VOIDGATE_RATE_LIMIT_PER_MINUTE` | Não | Capacidade do limite local das rotas de decisão: 1 a 10.000; padrão: 60. |
 
 Exemplo para gerar uma chave no PowerShell, sem gravá-la no repositório:
 
@@ -45,6 +46,8 @@ Invoke-RestMethod -Uri 'http://127.0.0.1:8080/v1/decisions/http' -Method Post -H
 ```
 
 Para um caminho configurado, a resposta é `{"action":"decoy","reason_code":"registered_decoy_path"}`. Para outro caminho válido, é `{"action":"allow","reason_code":"no_matching_rule"}`. Caminhos ambíguos ou codificados são rejeitados; a comparação dos caminhos de isca é exata.
+
+As rotas `/v1/decisions/*` compartilham um limite por processo, aplicado depois da autenticação e antes de ler o JSON. O algoritmo permite uma rajada de até `VOIDGATE_RATE_LIMIT_PER_MINUTE` pedidos e repõe a capacidade gradualmente ao longo de um minuto. Ao exceder o limite, a API responde `429 Too Many Requests` com `Retry-After` em segundos. Requisições sem chave válida respondem `401` e não consomem essa capacidade; limite também essas tentativas no gateway de entrada. As rotas de saúde permanecem acessíveis. Cada réplica mantém um contador próprio, portanto o limite ainda não é global.
 
 ### `POST /v1/decisions/chat`
 

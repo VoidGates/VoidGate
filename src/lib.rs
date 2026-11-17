@@ -66,8 +66,14 @@ pub fn app(state: AppState) -> Router {
             "/v1/decisions/chat",
             post(chat::decide_chat).layer(DefaultBodyLimit::max(chat::MAX_BODY_BYTES)),
         )
-        .route_layer(middleware::from_fn_with_state(state.clone(), runtime::protect))
-        .route_layer(middleware::from_fn_with_state(state.clone(), rate_limit::enforce))
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            runtime::protect,
+        ))
+        .route_layer(middleware::from_fn_with_state(
+            state.clone(),
+            rate_limit::enforce,
+        ))
         .route_layer(middleware::from_fn_with_state(state.clone(), authorize));
 
     let metrics = Router::new()
@@ -94,7 +100,9 @@ async fn ready(State(state): State<AppState>) -> (StatusCode, Json<HealthRespons
     } else {
         (
             StatusCode::SERVICE_UNAVAILABLE,
-            Json(HealthResponse { status: "not_ready" }),
+            Json(HealthResponse {
+                status: "not_ready",
+            }),
         )
     }
 }
@@ -262,7 +270,12 @@ mod tests {
         };
 
         assert_eq!(
-            router.clone().oneshot(request(None)).await.expect("response").status(),
+            router
+                .clone()
+                .oneshot(request(None))
+                .await
+                .expect("response")
+                .status(),
             StatusCode::UNAUTHORIZED
         );
         let key = "a".repeat(32);

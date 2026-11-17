@@ -106,7 +106,9 @@ impl RateLimiter {
             updated_at: now,
         });
         let now = now.max(bucket.updated_at);
-        let elapsed = now.saturating_duration_since(bucket.updated_at).as_secs_f64();
+        let elapsed = now
+            .saturating_duration_since(bucket.updated_at)
+            .as_secs_f64();
         let refill_per_second = self.capacity / WINDOW.as_secs_f64();
         bucket.tokens = (bucket.tokens + elapsed * refill_per_second).min(self.capacity);
         bucket.updated_at = now;
@@ -186,8 +188,14 @@ mod tests {
     fn allows_burst_then_refills_without_resetting_the_window() {
         let limiter = RateLimiter::new(RateLimitConfig::per_minute(2).expect("valid limit"));
         let start = Instant::now();
-        assert!(matches!(limiter.check_at(key(1), start), Ok(Decision::Allow)));
-        assert!(matches!(limiter.check_at(key(1), start), Ok(Decision::Allow)));
+        assert!(matches!(
+            limiter.check_at(key(1), start),
+            Ok(Decision::Allow)
+        ));
+        assert!(matches!(
+            limiter.check_at(key(1), start),
+            Ok(Decision::Allow)
+        ));
         assert!(matches!(
             limiter.check_at(key(1), start),
             Ok(Decision::Reject {
@@ -214,9 +222,18 @@ mod tests {
     fn each_client_has_an_independent_bucket() {
         let limiter = RateLimiter::new(RateLimitConfig::per_minute(1).expect("valid limit"));
         let instant = Instant::now();
-        assert!(matches!(limiter.check_at(key(1), instant), Ok(Decision::Allow)));
-        assert!(matches!(limiter.check_at(key(1), instant), Ok(Decision::Reject { .. })));
-        assert!(matches!(limiter.check_at(key(2), instant), Ok(Decision::Allow)));
+        assert!(matches!(
+            limiter.check_at(key(1), instant),
+            Ok(Decision::Allow)
+        ));
+        assert!(matches!(
+            limiter.check_at(key(1), instant),
+            Ok(Decision::Reject { .. })
+        ));
+        assert!(matches!(
+            limiter.check_at(key(2), instant),
+            Ok(Decision::Allow)
+        ));
     }
 
     #[test]
@@ -228,7 +245,9 @@ mod tests {
         let handles: Vec<_> = (0..20)
             .map(|_| {
                 let limiter = Arc::clone(&limiter);
-                thread::spawn(move || matches!(limiter.check_at(key(1), instant), Ok(Decision::Allow)))
+                thread::spawn(move || {
+                    matches!(limiter.check_at(key(1), instant), Ok(Decision::Allow))
+                })
             })
             .collect();
         let accepted = handles

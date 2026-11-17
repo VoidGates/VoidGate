@@ -30,9 +30,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
 #[cfg(unix)]
 async fn shutdown_signal() {
-    let mut terminate = match tokio::signal::unix::signal(
-        tokio::signal::unix::SignalKind::terminate(),
-    ) {
+    let mut terminate =
+        match tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()) {
         Ok(signal) => signal,
         Err(error) => {
             eprintln!("failed to register SIGTERM handler: {error}");

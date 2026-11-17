@@ -63,3 +63,43 @@ test('mexer em .github gera aviso, não bloqueio', () => {
   const r = scan(diff('.github/workflows/x.yml', 'on: push'))
   assert.ok(r.length && r.every(f => f.level === 'warn'))
 })
+
+test('renomear um arquivo existente para build.rs é bloqueado', () => {
+  const renamed = [
+    'diff --git a/tools/gen.rs b/build.rs',
+    'similarity index 100%',
+    'rename from tools/gen.rs',
+    'rename to build.rs',
+  ].join('\n')
+  assert.ok(names(renamed).includes('block:build.rs do Cargo (executa código ao compilar)'))
+  const config = renamed.replaceAll('build.rs', '.cargo/config.toml')
+  assert.ok(names(config).includes('block:Configuração do Cargo alterada (registry/fonte)'))
+  const harmless = renamed.replaceAll('build.rs', 'src/gen.rs')
+  assert.deepEqual(scan(harmless), [])
+})
+
+test('caminho entre aspas (acento) ainda cai nas regras por arquivo', () => {
+  const quoted = [
+    'diff --git "a/\\303\\251/package.json" "b/\\303\\251/package.json"',
+    '--- /dev/null',
+    '+++ "b/\\303\\251/package.json"',
+    '@@ -0,0 +1 @@',
+    '+"postinstall": "node x.js",',
+  ].join('\n')
+  const findings = scan(quoted)
+  assert.ok(findings.some(f => f.name === 'Hook de instalação npm' && f.file === 'é/package.json'))
+})
+
+test('formas alternativas de chave no Cargo.toml', () => {
+  const block = line => names(diff('Cargo.toml', line)).filter(n => n.startsWith('block'))
+  assert.ok(block('package.build = "x.rs"').includes('block:Build script declarado no Cargo.toml'))
+  assert.ok(block('"build" = "x.rs"').includes('block:Build script declarado no Cargo.toml'))
+  assert.ok(block('x = { "git" = "https://evil.io/x" }').includes('block:Dependência Rust fora do crates.io'))
+  assert.ok(block('x.git = "https://evil.io/x"').includes('block:Dependência Rust fora do crates.io'))
+  assert.ok(block('[patch.crates-io]').some(n => n.includes('[patch]')))
+  assert.ok(block('[replace]').some(n => n.includes('[patch]')))
+  assert.ok(names(diff('Cargo.toml', 'evil = { path = "../evil" }')).some(n => n.startsWith('warn:Caminho local')))
+  // Linhas legítimas deste repositório continuam passando sem bloqueio.
+  for (const line of ['hyper = { version = "1", features = ["http1", "server"] }', 'publish = false', 'edition = "2021"', 'digit = "1"'])
+    assert.deepEqual(block(line), [], line)
+})

@@ -1,6 +1,6 @@
 # VoidGate backend
 
-O VoidGate é uma camada adicional e opcional de segurança para aplicações e fluxos de IA. Este repositório contém um esqueleto de API em Rust. Nesta etapa, ele **decide** se um caminho HTTP configurado deve ser encaminhado para uma isca; o gateway que integra a API precisa aplicar a decisão. O serviço ainda não recebe tráfego como proxy nem executa um ambiente-isca.
+O VoidGate é uma camada adicional e opcional de segurança para aplicações e fluxos de IA. Este repositório contém um esqueleto de API em Rust. Nesta etapa, ele **decide** se um caminho HTTP configurado deve ser encaminhado para uma isca e se uma mensagem de chat pode seguir; o gateway que integra a API precisa aplicar a decisão. O serviço ainda não recebe tráfego como proxy nem executa um ambiente-isca.
 
 ## Requisitos
 
@@ -46,6 +46,45 @@ Invoke-RestMethod -Uri 'http://127.0.0.1:8080/v1/decisions/http' -Method Post -H
 
 Para um caminho configurado, a resposta é `{"action":"decoy","reason_code":"registered_decoy_path"}`. Para outro caminho válido, é `{"action":"allow","reason_code":"no_matching_rule"}`. Caminhos ambíguos ou codificados são rejeitados; a comparação dos caminhos de isca é exata.
 
+### `POST /v1/decisions/chat`
+
+Decide se uma mensagem de chat pode seguir. Exige `x-voidgate-key` e JSON com exatamente dois campos:
+
+| Campo | Valores |
+| --- | --- |
+| `role` | `"user"`, `"system"` ou `"assistant"` |
+| `content` | texto UTF-8 válido de até 16 KiB |
+
+O corpo desta rota é limitado a 32 KiB. O `content` é inspecionado em memória e descartado: ele **nunca** aparece na resposta nem em logs; a resposta só traz posições em bytes do texto original.
+
+Resposta: `{"action":"allow"|"block","reason_codes":[...],"findings":[{"code","detector","start","end"}]}`. `start` e `end` são offsets em bytes (fim exclusivo) do `content` enviado. Sem ocorrências, `action` é `allow` e as duas listas vêm vazias.
+
+Códigos de motivo (`reason_codes`) nesta versão:
+
+| Código | Detector | Dispara quando |
+| --- | --- | --- |
+| `content.invisible_unicode` | `invisible_unicode` | O texto contém caracteres invisíveis ou de controle bidirecional (Trojan Source): U+200B–U+200F, U+2028–U+202E, U+2060–U+2064, U+2066–U+2069 ou U+FEFF. Qualquer ocorrência gera `block`. |
+
+Respostas de erro: `401` sem chave válida (antes de ler o corpo), `400` para JSON inválido, `role` desconhecida, campo extra ou faltante, `413` para `content` acima de 16 KiB ou corpo acima de 32 KiB, `415` sem `Content-Type: application/json`.
+
+Exemplo no PowerShell. O corpo é enviado como bytes UTF-8 porque o Windows PowerShell 5.1 codifica strings com acento em ANSI, que o serviço rejeita com `400`:
+
+```powershell
+$body = [System.Text.Encoding]::UTF8.GetBytes('{"role":"user","content":"Olá, tudo bem?"}')
+Invoke-RestMethod -Uri 'http://127.0.0.1:8080/v1/decisions/chat' -Method Post -Headers @{ 'x-voidgate-key' = $env:VOIDGATE_API_KEY } -ContentType 'application/json' -Body $body
+```
+
+Resposta: `{"action":"allow","reason_codes":[],"findings":[]}`. Com um U+202E (override da direita para a esquerda) após `Olá `:
+
+```powershell
+$body = [System.Text.Encoding]::UTF8.GetBytes('{"role":"user","content":"Olá ' + [char]0x202E + 'mundo"}')
+Invoke-RestMethod -Uri 'http://127.0.0.1:8080/v1/decisions/chat' -Method Post -Headers @{ 'x-voidgate-key' = $env:VOIDGATE_API_KEY } -ContentType 'application/json' -Body $body | ConvertTo-Json -Depth 5 -Compress
+```
+
+Resposta: `{"action":"block","reason_codes":["content.invisible_unicode"],"findings":[{"code":"content.invisible_unicode","detector":"invisible_unicode","start":5,"end":8}]}` (`Olá ` ocupa 5 bytes e o U+202E ocupa 3).
+
+Os detectores ficam em `src/detectors/`, cada um implementando o trait `Detector`; novos detectores entram na lista `default_detectors()` sem alterar o handler.
+
 ## Verificação
 
 ```text
@@ -56,4 +95,4 @@ cargo test --locked --all-targets
 
 ## Limites desta etapa
 
-Este serviço não é um firewall de rede nem substitui autenticação da aplicação ou WAF. Não há ainda rate limit distribuído, identidade por tenant, proxy de chat, réplicas, isolamento da isca ou TLS dentro do processo. Mantenha o bind local ou coloque a API atrás de um gateway confiável com TLS e controles de acesso. A decisão `allow` ou `decoy` só tem efeito quando esse gateway a aplica.
+Este serviço não é um firewall de rede nem substitui autenticação da aplicação ou WAF. Não há ainda rate limit distribuído, identidade por tenant, proxy de chat, réplicas, isolamento da isca ou TLS dentro do processo. A decisão de chat só detecta caracteres Unicode invisíveis; não há redação, detecção de dados pessoais nem de manipulação de prompt. Mantenha o bind local ou coloque a API atrás de um gateway confiável com TLS e controles de acesso. A decisão `allow` ou `decoy` só tem efeito quando esse gateway a aplica.

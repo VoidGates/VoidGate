@@ -22,8 +22,40 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .unwrap_or_else(|| "127.0.0.1:8080".into())
         .parse()?;
     let listener = tokio::net::TcpListener::bind(address).await?;
-    axum::serve(listener, app(state)).await?;
+    axum::serve(listener, app(state))
+        .with_graceful_shutdown(shutdown_signal())
+        .await?;
     Ok(())
+}
+
+#[cfg(unix)]
+async fn shutdown_signal() {
+    let mut terminate = match tokio::signal::unix::signal(
+        tokio::signal::unix::SignalKind::terminate(),
+    ) {
+        Ok(signal) => signal,
+        Err(error) => {
+            eprintln!("failed to register SIGTERM handler: {error}");
+            std::process::exit(1);
+        }
+    };
+    tokio::select! {
+        result = tokio::signal::ctrl_c() => {
+            if let Err(error) = result {
+                eprintln!("failed to receive Ctrl+C: {error}");
+                std::process::exit(1);
+            }
+        }
+        _ = terminate.recv() => {}
+    }
+}
+
+#[cfg(not(unix))]
+async fn shutdown_signal() {
+    if let Err(error) = tokio::signal::ctrl_c().await {
+        eprintln!("failed to receive Ctrl+C: {error}");
+        std::process::exit(1);
+    }
 }
 
 fn optional_env(name: &'static str) -> Result<Option<String>, env::VarError> {

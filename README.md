@@ -18,7 +18,7 @@ Defina as variáveis no ambiente do processo antes de executar. O arquivo `.env.
 | `VOIDGATE_API_KEY` | Sim | Chave enviada no cabeçalho `x-voidgate-key` da rota de decisão. |
 | `VOIDGATE_DECOY_PATHS` | Não | Caminhos exatos separados por vírgula; padrão: nenhum. |
 | `VOIDGATE_BIND` | Não | Endereço de escuta; padrão: `127.0.0.1:8080`. |
-| `VOIDGATE_RATE_LIMIT_PER_MINUTE` | Não | Capacidade do limite local das rotas de decisão: 1 a 10.000; padrão: 60. |
+| `VOIDGATE_RATE_LIMIT_PER_MINUTE` | Não | Capacidade local por credencial: 1 a 10.000; padrão: 60. |
 
 Exemplo para gerar uma chave no PowerShell, sem gravá-la no repositório:
 
@@ -36,7 +36,7 @@ Se a chave ou um caminho configurado for inválido, ou se a porta não puder ser
 
 ## API atual
 
-- `GET /health`, `GET /live` e `GET /ready` retornam `{"status":"ok"}`. Nesta versão, `/ready` ainda não testa dependências externas.
+- `GET /health` e `GET /live` indicam que o processo está ativo. `GET /ready` verifica se o estado em memória do limitador está disponível. Não há dependências externas configuradas nesta etapa.
 - `POST /v1/decisions/http` exige `x-voidgate-key` e JSON com `method` e `path`. O corpo é limitado a 4 KiB.
 
 Exemplo no PowerShell, em outro terminal que também tenha `VOIDGATE_API_KEY` definida:
@@ -47,7 +47,7 @@ Invoke-RestMethod -Uri 'http://127.0.0.1:8080/v1/decisions/http' -Method Post -H
 
 Para um caminho configurado, a resposta é `{"action":"decoy","reason_code":"registered_decoy_path"}`. Para outro caminho válido, é `{"action":"allow","reason_code":"no_matching_rule"}`. Caminhos ambíguos ou codificados são rejeitados; a comparação dos caminhos de isca é exata.
 
-As rotas `/v1/decisions/*` compartilham um limite por processo, aplicado depois da autenticação e antes de ler o JSON. O algoritmo permite uma rajada de até `VOIDGATE_RATE_LIMIT_PER_MINUTE` pedidos e repõe a capacidade gradualmente ao longo de um minuto. Ao exceder o limite, a API responde `429 Too Many Requests` com `Retry-After` em segundos. Requisições sem chave válida respondem `401` e não consomem essa capacidade; limite também essas tentativas no gateway de entrada. As rotas de saúde permanecem acessíveis. Cada réplica mantém um contador próprio, portanto o limite ainda não é global.
+As rotas `/v1/decisions/*` aplicam um limite por credencial autenticada, depois da autenticação e antes de ler o JSON. O serviço aceita uma única chave nesta versão, e o limitador mantém buckets em memória com capacidade limitada. O algoritmo permite uma rajada de até `VOIDGATE_RATE_LIMIT_PER_MINUTE` pedidos e repõe a capacidade gradualmente ao longo de um minuto. Ao exceder o limite, a API responde `429 Too Many Requests` com `Retry-After` em segundos. Requisições sem chave válida respondem `401` e não consomem essa capacidade. Configure no gateway o limite por IP para tentativas sem chave; esta aplicação não confia em `X-Forwarded-For`. As rotas de saúde permanecem acessíveis. Cada réplica mantém seus próprios buckets, portanto o limite ainda não é global. O serviço também impõe no máximo 256 decisões concorrentes e encerra decisões que excedam 5 segundos com `504`. `GET /metrics` exige a chave da API e expõe apenas contadores agregados, sem conteúdo, caminhos ou credenciais.
 
 ### `POST /v1/decisions/chat`
 
@@ -98,4 +98,4 @@ cargo test --locked --all-targets
 
 ## Limites desta etapa
 
-Este serviço não é um firewall de rede nem substitui autenticação da aplicação ou WAF. Não há ainda rate limit distribuído, identidade por tenant, proxy de chat, réplicas, isolamento da isca ou TLS dentro do processo. A decisão de chat só detecta caracteres Unicode invisíveis; não há redação, detecção de dados pessoais nem de manipulação de prompt. Mantenha o bind local ou coloque a API atrás de um gateway confiável com TLS e controles de acesso. A decisão `allow` ou `decoy` só tem efeito quando esse gateway a aplica.
+Este serviço não é um firewall de rede nem substitui autenticação da aplicação ou WAF; ele oferece decisões para o gateway consumidor aplicar. O limite continua local a cada réplica e ainda não existe um registro multi-chave/tenant. A decisão de chat nesta versão detecta apenas os caracteres Unicode invisíveis listados acima; não há redação, detecção de dados pessoais nem detecção geral de manipulação de prompt. O endpoint `/ready` verifica apenas a disponibilidade do estado local, pois ainda não há dependências externas. O processo encerra de forma graciosa ao receber Ctrl+C ou SIGTERM. Mantenha o bind local ou coloque a API atrás de um gateway confiável com TLS, limite por IP e controles de acesso. A decisão `allow` ou `decoy` só tem efeito quando esse gateway a aplica.

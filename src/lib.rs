@@ -1,8 +1,10 @@
 mod auth;
 mod chat;
 mod detectors;
+mod metrics;
 mod policy;
 mod rate_limit;
+mod runtime;
 
 use std::sync::Arc;
 
@@ -14,14 +16,17 @@ use axum::{
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
+use tokio::sync::Semaphore;
 
 use auth::{authorize, ApiKeyVerifier};
 use detectors::Detector;
+use metrics::Metrics;
 use policy::{valid_path, Decision, ExactPathPolicy};
 pub use rate_limit::RateLimitConfig;
 use rate_limit::RateLimiter;
 
 const MAX_BODY_BYTES: usize = 4096;
+const MAX_CONCURRENT_DECISIONS: usize = 256;
 
 #[derive(Clone)]
 pub struct AppState {
@@ -29,6 +34,8 @@ pub struct AppState {
     policy: Arc<ExactPathPolicy>,
     detectors: Arc<Vec<Box<dyn Detector>>>,
     rate_limiter: Arc<RateLimiter>,
+    decision_slots: Arc<Semaphore>,
+    metrics: Arc<Metrics>,
 }
 
 impl AppState {
@@ -46,6 +53,8 @@ impl AppState {
             policy: Arc::new(ExactPathPolicy::new(decoy_paths)?),
             detectors: Arc::new(detectors::default_detectors()),
             rate_limiter: Arc::new(RateLimiter::new(rate_limit)),
+            decision_slots: Arc::new(Semaphore::new(MAX_CONCURRENT_DECISIONS)),
+            metrics: Arc::new(Metrics::default()),
         })
     }
 }
@@ -57,20 +66,37 @@ pub fn app(state: AppState) -> Router {
             "/v1/decisions/chat",
             post(chat::decide_chat).layer(DefaultBodyLimit::max(chat::MAX_BODY_BYTES)),
         )
+        .route_layer(middleware::from_fn_with_state(state.clone(), runtime::protect))
         .route_layer(middleware::from_fn_with_state(state.clone(), rate_limit::enforce))
         .route_layer(middleware::from_fn_with_state(state.clone(), authorize));
 
+    let metrics = Router::new()
+        .route("/metrics", get(metrics::export))
+        .route_layer(middleware::from_fn_with_state(state.clone(), authorize));
+
     Router::new()
-        .route("/health", get(health))
-        .route("/live", get(health))
-        .route("/ready", get(health))
+        .route("/health", get(live))
+        .route("/live", get(live))
+        .route("/ready", get(ready))
+        .merge(metrics)
         .merge(decisions)
         .layer(DefaultBodyLimit::max(MAX_BODY_BYTES))
         .with_state(state)
 }
 
-async fn health() -> Json<HealthResponse> {
+async fn live() -> Json<HealthResponse> {
     Json(HealthResponse { status: "ok" })
+}
+
+async fn ready(State(state): State<AppState>) -> (StatusCode, Json<HealthResponse>) {
+    if state.rate_limiter.is_available() {
+        (StatusCode::OK, Json(HealthResponse { status: "ready" }))
+    } else {
+        (
+            StatusCode::SERVICE_UNAVAILABLE,
+            Json(HealthResponse { status: "not_ready" }),
+        )
+    }
 }
 
 #[derive(Serialize)]
@@ -116,7 +142,6 @@ fn valid_method(method: &str) -> bool {
         "GET" | "HEAD" | "POST" | "PUT" | "PATCH" | "DELETE" | "OPTIONS"
     )
 }
-
 #[cfg(test)]
 mod tests {
     use axum::{

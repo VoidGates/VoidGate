@@ -1,6 +1,6 @@
 # Contribuir
 
-O VoidGate aceita correção e função nova pelo fluxo normal do GitHub: um branch, um pull request para `main`, e a integração contínua verde.
+O trabalho do dia entra na `develop`, com commit e merge direto. A `main` só muda por pull request, com a integração contínua verde.
 
 ## Onde a mudança entra
 

@@ -14,12 +14,10 @@ fn key() -> String {
 }
 
 fn router(upstream: Option<String>) -> axum::Router {
-    app(
-        AppState::new(key(), vec!["/internal/backup".into()])
-            .expect("state")
-            .with_upstream(upstream)
-            .expect("upstream"),
-    )
+    app(AppState::new(key(), vec!["/internal/backup".into()])
+        .expect("state")
+        .with_upstream(upstream)
+        .expect("upstream"))
 }
 
 async fn send(
@@ -186,14 +184,22 @@ async fn masks_personal_data_from_several_countries() {
         assert_eq!(status, StatusCode::OK, "{content} {text}");
         let json: Value = serde_json::from_str(&text).unwrap();
         assert_eq!(json["action"], "mask", "{content} {text}");
-        assert_eq!(json["reason_codes"], json!(["content.personal_data"]), "{content}");
+        assert_eq!(
+            json["reason_codes"],
+            json!(["content.personal_data"]),
+            "{content}"
+        );
         assert!(!text.contains(secret), "echoed {secret} in {text}");
     }
 }
 
 #[tokio::test]
 async fn an_order_number_and_a_bad_ssn_stay_allowed() {
-    for content in ["pedido 1529982247259", "SSN 000-12-3456", "CPF 111.111.111-11"] {
+    for content in [
+        "pedido 1529982247259",
+        "SSN 000-12-3456",
+        "CPF 111.111.111-11",
+    ] {
         let json = chat(content).await;
         assert_eq!(json["action"], "allow", "{content}");
     }
@@ -269,7 +275,8 @@ async fn proxy_redacts_on_the_way_to_the_model_and_on_the_way_back() {
         }
         let req = String::from_utf8_lossy(&buf[..read]).to_string();
         let _ = tx.send(req);
-        let reply = r#"{"choices":[{"message":{"role":"assistant","content":"call +1 415 555 2671"}}]}"#;
+        let reply =
+            r#"{"choices":[{"message":{"role":"assistant","content":"call +1 415 555 2671"}}]}"#;
         let raw = format!(
             "HTTP/1.1 200 OK\r\ncontent-type: application/json\r\ncontent-length: {}\r\nconnection: close\r\n\r\n{reply}",
             reply.len()

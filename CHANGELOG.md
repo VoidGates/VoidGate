@@ -1,6 +1,6 @@
 # Changelog
 
-A versão do VoidGate é uma só para a API e para o site. A tag `v0.1.0` marca esta primeira versão.
+A versão do VoidGate é uma só para a API e para o site. A tag `v0.1.0` marca a primeira versão. Daqui em diante, um commit `feat:` na `main` sobe o minor, um `fix:` sobe o patch, e `feat!:`, `fix!:` ou `BREAKING CHANGE` sobe o major. O resto não gera versão.
 
 ## [0.1.0] - 2026-11-19
 

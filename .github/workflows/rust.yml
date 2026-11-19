@@ -21,7 +21,7 @@ jobs:
       - run: cargo fmt --all -- --check
       - run: cargo clippy --locked --workspace --all-targets -- -D warnings
       - run: cargo test --locked --workspace --all-targets
-      - run: node --test .github/scripts/pr-guard.test.mjs
+      - run: node --test .github/scripts/pr-guard.test.mjs .github/scripts/release.test.mjs
 
   # Separate job (not a matrix) so the name of the required `verify` check does not change.
   verify-windows:

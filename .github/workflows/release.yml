@@ -1,0 +1,24 @@
+name: Release
+
+# A push to main looks at commits after the latest vX.Y.Z tag.
+# feat raises the minor, fix raises the patch, feat!/fix! or BREAKING CHANGE
+# raises the major. Anything else, including this workflow's own commit, stops.
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: node --test .github/scripts/release.test.mjs
+      - run: node .github/scripts/release.mjs

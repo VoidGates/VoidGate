@@ -1,8 +1,6 @@
 <p align="center">
-  <img src="VoidGate-mark.svg" alt="Marca do VoidGate" width="88">
+  <img src="VoidGate.jpg" alt="VoidGate" width="480">
 </p>
-
-<h1 align="center">VoidGate</h1>
 
 <p align="center">
   Camada opcional de segurança entre a aplicação e qualquer modelo de IA.

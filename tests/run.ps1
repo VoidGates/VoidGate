@@ -5,5 +5,5 @@ Set-Location $PSScriptRoot
 cargo test
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
-node --test frontend/product.test.ts
+node --test web/product.test.ts
 exit $LASTEXITCODE

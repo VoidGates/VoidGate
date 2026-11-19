@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import test from 'node:test'
-import { analyze } from '../../frontend/src/detector/analyze.ts'
+import { analyze } from '../../web/src/detector/analyze.ts'
 
 test('a demonstração libera pedido comum e senha esquecida', () => {
   for (const text of [
@@ -49,8 +49,8 @@ test('manipulação vence a máscara na demonstração', () => {
 })
 
 test('o site tem português e inglês para o mesmo produto', () => {
-  const site = readFileSync(new URL('../../frontend/src/i18n.tsx', import.meta.url), 'utf8')
-  const quiz = readFileSync(new URL('../../frontend/src/components/Quiz.tsx', import.meta.url), 'utf8')
+  const site = readFileSync(new URL('../../web/src/i18n.tsx', import.meta.url), 'utf8')
+  const quiz = readFileSync(new URL('../../web/src/components/Quiz.tsx', import.meta.url), 'utf8')
   for (const line of [
     'O firewall que fala a língua da IA.',
     'The firewall between your app and any model.',

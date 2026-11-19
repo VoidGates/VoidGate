@@ -1,8 +1,8 @@
-# voidgate-frontend
+# Site
 
 Interface web da **VoidGate**, a camada de segurança entre aplicações e modelos de IA.
 
-Backend: [VoidGates/voidgate-backend](https://github.com/VoidGates/voidgate-backend)
+A API fica em `src/` na raiz deste repositório.
 
 ## O VoidGate em 30 segundos
 
@@ -54,7 +54,7 @@ npm install
 npm run dev     # http://localhost:5173
 ```
 
-Em dev, chamadas para `/api/*` são repassadas para o backend em `http://localhost:8080`
+Em dev, chamadas para `/api/*` são repassadas para a API em `http://localhost:8080`
 (mude com a variável `VITE_API_URL`).
 
 ## Scripts
@@ -64,7 +64,7 @@ Em dev, chamadas para `/api/*` são repassadas para o backend em `http://localho
 | `npm run dev`   | servidor de desenvolvimento |
 | `npm run build` | build de produção em `dist/` |
 | `npm run lint`  | lint com oxlint        |
-| `npm test`      | testes unitários do detector e do PR Guard (`node --test`) |
+| `npm test`      | testes unitários do detector (`node --test`) |
 | `npm run test:e2e` | testes de ponta a ponta com Cypress (sobe o Vite sozinho) |
 | `npm run test:e2e:open` | abre o Cypress em modo interativo |
 
@@ -78,7 +78,7 @@ ativar num repositório (fork ou organização):
 2. Para publicar a partir da `develop`, adicione essa branch em Settings >
    Environments > github-pages > Deployment branches.
 
-O site fica em `https://<dono>.github.io/voidgate-frontend/`.
+O site fica em `https://<dono>.github.io/VoidGate/`.
 
 ## Uso de IA
 

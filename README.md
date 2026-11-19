@@ -1,6 +1,12 @@
-# VoidGate backend
+# VoidGate
 
-O VoidGate é uma camada adicional e opcional de segurança para aplicações e fluxos de IA. Este repositório contém um esqueleto de API em Rust. Nesta etapa, ele **decide** se um caminho HTTP configurado deve ser encaminhado para uma isca e se uma mensagem de chat pode seguir; o gateway que integra a API precisa aplicar a decisão. O serviço ainda não recebe tráfego como proxy nem executa um ambiente-isca.
+O VoidGate é uma camada adicional e opcional de segurança para aplicações e fluxos de IA.
+
+- `src/` é a API. A entrada HTTP fica em `handlers`, a regra em `services` e a decisão pura em `domain`.
+- `web/` é o site. A demonstração roda no navegador.
+- `tests/` cobre a API e a demonstração.
+
+A API decide se uma mensagem de chat pode seguir, mascara dado pessoal ou bloqueia. `POST /v1/proxy/chat` encaminha ao modelo depois dessa decisão. Não executa um ambiente-isca.
 
 ## Requisitos
 
@@ -43,7 +49,7 @@ O processo se recusa a iniciar, com uma mensagem `error: ...`, quando a configur
 - nome desconhecido com prefixo `VOIDGATE_`, no `.env` ou no ambiente, como `VOIDGATE_DECOY_PATH` sem o S;
 - `VOIDGATE_DEV_DOCS` diferente de `0` e `1`, ou `VOIDGATE_RATE_LIMIT_PER_MINUTE` que não seja um número de 1 a 10000.
 
-Ao subir, o processo imprime `voidgate-backend listening on http://<endereço>`. Os valores opcionais ausentes usam os padrões acima.
+Ao subir, o processo imprime `voidgate listening on http://<endereço>`. Os valores opcionais ausentes usam os padrões acima.
 
 ### Encerramento
 

@@ -1,5 +1,5 @@
 {
-  "name": "voidgate-frontend",
+  "name": "voidgate-web",
   "private": true,
   "version": "0.0.0",
   "type": "module",
@@ -8,7 +8,7 @@
     "build": "tsc -b && vite build",
     "lint": "oxlint",
     "preview": "vite preview",
-    "test": "node --test \"tests/unit/*.test.ts\" .github/scripts/pr-guard.test.mjs",
+    "test": "node --test \"tests/unit/*.test.ts\"",
     "test:e2e": "cypress run",
     "test:e2e:open": "cypress open --e2e"
   },

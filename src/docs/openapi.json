@@ -1,7 +1,7 @@
 {
   "openapi": "3.0.3",
   "info": {
-    "title": "VoidGate backend",
+    "title": "VoidGate",
     "version": "0.1.0",
     "description": "API de decisão do VoidGate. Clique em **Authorize** e informe o valor de `VOIDGATE_API_KEY`.\n\nAs respostas são para o gateway que integra a API. Nunca repasse `reason_code`, `reason_codes`, `findings` ou o corpo de um erro ao cliente final.\n\nAs rotas de decisão têm limite por credencial (`429` com `Retry-After`), no máximo 256 decisões simultâneas (`503`) e 5 segundos por decisão, contando a chegada do corpo (`504`)."
   },

@@ -4,7 +4,7 @@ Capa e faixas: fundo #110d0b, painéis #1b1613, linhas #2f2722, texto #efe7da, t
 Miolo: fundo #f7f3ec, texto #1b1613. Bloqueio #f0594e. Liberado #7fc4a4.
 Títulos: Bricolage Grotesque. Corpo: Instrument Sans ou Source Sans 3. Código e tabelas: JetBrains Mono.
 Cabeçalho: VoidGate
-Rodapé: Documentação do produto · versão do código 0.1.0 (backend) / 0.0.0 (site) · confidencial para uso comercial
+Rodapé: Documentação do produto · versão do código 0.1.0 (API) / 0.0.0 (site) · confidencial para uso comercial
 Numerar a partir do sumário. Quebrar a página em cada marcação <!-- página -->.
 -->
 
@@ -56,12 +56,12 @@ O VoidGate fica entre o chatbot e o modelo. A visão do produto é barrar manipu
 
 O VoidGate é uma camada adicional e opcional de segurança para aplicações e fluxos de IA. O núcleo é aberto. A receita prevista está na nuvem e no contrato, não na licença do código.
 
-O trabalho está em dois repositórios, sob a organização [https://github.com/VoidGates](https://github.com/VoidGates):
+O trabalho está num repositório, [VoidGate](https://github.com/VoidGates/VoidGate):
 
-| Repositório | Papel | Versão nesta documentação |
+| Pasta | Papel | Versão nesta documentação |
 | --- | --- | --- |
-| voidgate-backend | API de decisão em Rust | 0.1.0 |
-| voidgate-frontend | Site de apresentação | 0.0.0 |
+| `src/` | API de decisão em Rust | 0.1.0 |
+| `web/` | Site de apresentação | 0.0.0 |
 
 A visão de produto coloca a camada nos dois sentidos da conversa:
 
@@ -274,13 +274,13 @@ Não há dependência externa configurada nesta etapa.
 
 ### O que esta API não é
 
-A API 0.1.0 não é firewall de rede. Não substitui o login da aplicação nem um WAF. Não tem limite de taxa distribuído, identidade por empresa, proxy de chat, réplicas coordenadas, isolamento da isca nem TLS dentro do processo. A decisão `allow` ou `decoy` só vale quando o gateway a aplica. O bind fica em loopback, ou a API fica atrás de um gateway com TLS e controle de acesso.
+A API 0.1.0 não é firewall de rede. Não substitui o login da aplicação nem um WAF. Não tem limite de taxa distribuído, identidade por empresa, réplicas coordenadas, isolamento da isca nem TLS dentro do processo. A decisão `allow` ou `decoy` só vale quando o gateway a aplica. O bind fica em loopback, ou a API fica atrás de um gateway com TLS e controle de acesso.
 
 <!-- página -->
 
-## 6. Arquitetura do backend
+## 6. Arquitetura da API
 
-A crate `voidgate-backend` está na versão 0.1.0, edition 2021, e não é publicada no registry. As dependências de runtime são Axum 0.8, Hyper, Tokio, Serde, SHA-2 e subtle. As versões ficam presas em `Cargo.lock`. O comando de build usa `--locked`.
+A crate `voidgate` está na versão 0.1.0, edition 2021, e não é publicada no registry. O código fica em `src/`. As dependências de runtime são Axum 0.8, Hyper, Tokio, Serde, SHA-2 e subtle. As versões ficam presas em `Cargo.lock`. O comando de build usa `--locked`.
 
 O código segue arquitetura em camadas. Cada camada chama só a de baixo:
 
@@ -375,7 +375,7 @@ O texto é comparado em minúsculas, sem acento e sem esses invisíveis. O resul
 
 ### Publicação e testes
 
-O workflow `deploy-pages.yml` publica o site no GitHub Pages a cada push em `main` ou `develop`, ou manualmente pela aba Actions. O endereço fica `https://<dono>.github.io/voidgate-frontend/`.
+O workflow `deploy-pages.yml` publica o site no GitHub Pages a cada push em `main` ou `develop`, ou manualmente pela aba Actions. O endereço fica `https://<dono>.github.io/VoidGate/`.
 
 Em desenvolvimento, o Vite repassa `/api/*` para `http://localhost:8080`, endereço trocável por `VITE_API_URL`. O site ainda não usa esse proxy.
 
@@ -421,7 +421,7 @@ O leitor aceita só linhas `NOME=valor`. Sem aspas, sem `export`, sem comentári
 cargo run --locked
 ```
 
-Quando a configuração fecha, o processo imprime `voidgate-backend listening on http://<endereço>`.
+Quando a configuração fecha, o processo imprime `voidgate listening on http://<endereço>`.
 
 Para gerar a chave no PowerShell e subir sem arquivo:
 

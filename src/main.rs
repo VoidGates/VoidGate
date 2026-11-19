@@ -1,6 +1,6 @@
 use std::{collections::HashMap, env, fs, io, net::SocketAddr, process::ExitCode};
 
-use voidgate_backend::{app, serve, AppState, RateLimitConfig};
+use voidgate::{app, serve, AppState, RateLimitConfig};
 
 const SETTINGS: [&str; 6] = [
     "VOIDGATE_API_KEY",
@@ -83,14 +83,14 @@ async fn run() -> Result<(), Box<dyn std::error::Error>> {
             if !address.ip().is_loopback() {
                 return Err("VOIDGATE_DEV_DOCS=1 requires a loopback VOIDGATE_BIND".into());
             }
-            router = router.merge(voidgate_backend::dev_docs());
+            router = router.merge(voidgate::dev_docs());
         }
     }
 
     let listener = tokio::net::TcpListener::bind(address)
         .await
         .map_err(|error| format!("cannot listen on {address}: {error}"))?;
-    eprintln!("voidgate-backend listening on http://{address}");
+    eprintln!("voidgate listening on http://{address}");
     if proxy_enabled {
         eprintln!("chat proxy enabled");
     }

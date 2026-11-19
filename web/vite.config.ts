@@ -8,7 +8,7 @@ export default defineConfig({
   base: process.env.BASE_PATH ?? '/',
   plugins: [react()],
   server: {
-    // repassa /api para o backend em dev, sem precisar de CORS
+    // repassa /api para a API em dev, sem precisar de CORS
     proxy: {
       '/api': {
         target: process.env.VITE_API_URL ?? 'http://localhost:8080',

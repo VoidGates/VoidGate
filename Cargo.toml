@@ -1,5 +1,9 @@
+[workspace]
+members = ["tests"]
+resolver = "2"
+
 [package]
-name = "voidgate-backend"
+name = "voidgate"
 version = "0.1.0"
 edition = "2021"
 publish = false

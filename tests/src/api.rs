@@ -7,7 +7,7 @@ use axum::{
 use serde_json::{json, Value};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tower::ServiceExt;
-use voidgate_backend::{app, AppState};
+use voidgate::{app, AppState};
 
 fn key() -> String {
     "k".repeat(32)

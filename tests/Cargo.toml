@@ -4,11 +4,8 @@ version = "0.1.0"
 edition = "2021"
 publish = false
 
-# Lives beside backend/ and frontend/ so the suite stays at the repo root
-# when those two trees become one repository.
-
 [dependencies]
-voidgate-backend = { path = "../backend" }
+voidgate = { path = ".." }
 axum = "0.8"
 serde_json = "1"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "io-util"] }

@@ -1,3 +1,13 @@
+//! Process entry: reads configuration and serves the API.
+//!
+//! Required: `VOIDGATE_API_KEY` (32–128 bytes, no surrounding spaces or control
+//! characters). Optional: `VOIDGATE_DECOY_PATHS`, `VOIDGATE_BIND` (default
+//! `127.0.0.1:8080`), `VOIDGATE_RATE_LIMIT_PER_MINUTE` (1–10000, default 60),
+//! `VOIDGATE_DEV_DOCS` (`0` or `1`, development builds only), and
+//! `VOIDGATE_UPSTREAM_URL` (an `http` or `https` URL without userinfo; unset
+//! makes `POST /v1/proxy/chat` return 503). Any other `VOIDGATE_*` name
+//! refuses startup. The file format is `.env.example`.
+
 use std::{collections::HashMap, env, fs, io, net::SocketAddr, process::ExitCode};
 
 use voidgate::{app, serve, AppState, RateLimitConfig};

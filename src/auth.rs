@@ -1,3 +1,5 @@
+//! Checks `x-voidgate-key` against the single configured API key.
+
 use axum::{
     extract::{Request, State},
     http::HeaderValue,

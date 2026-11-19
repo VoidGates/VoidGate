@@ -14,8 +14,8 @@ prevê multa de até 2% do faturamento, limitada a R$ 50 milhões por infração
 
 **Solução.** Uma camada entre a aplicação e o modelo, que funciona com qualquer
 modelo de IA: confere cada mensagem, bloqueia manipulação, remove texto
-escondido e mascara dados pessoais (CPF, e-mail) antes que cheguem ao modelo ou
-voltem ao cliente. Feita para o português e para a LGPD.
+escondido e mascara dados pessoais antes que cheguem ao modelo ou
+voltem ao cliente. O site está em português e inglês.
 
 **Modelo de negócio.** Open-core: o núcleo é aberto e gratuito; a receita vem
 da versão em nuvem (cobrança por volume de mensagens, painel e relatório para
@@ -35,9 +35,9 @@ proteção, "Como funciona", o quiz "Você consegue ver o ataque?", "para quem",
 código aberto e planos. As animações param para quem ativa "reduzir movimento" no sistema.
 
 "Tente enganar a IA" roda inteiro no navegador, com regras simplificadas em
-`src/detector/` (manipulação em português e inglês, caracteres invisíveis, CPF
-com dígito verificador e e-mail). Não é o motor do back-end e não envia nada
-para servidor nenhum.
+`src/detector/` (manipulação em várias línguas, caracteres invisíveis, CPF,
+e-mail, telefone, cartão e IBAN). Não é o motor da API e não envia nada
+para servidor nenhum. Um caractere invisível sozinho é removido aqui; na API, ele bloqueia.
 
 ## Stack
 

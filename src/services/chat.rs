@@ -1,3 +1,5 @@
+//! Chat decision. `block` wins over `mask`. Personal data alone is `mask`.
+
 use crate::{
     domain::detectors::{personal_data, Detector, Finding},
     error::AppError,

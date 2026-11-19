@@ -1,3 +1,5 @@
+//! Bounds each decision: at most 256 in flight, and 5 seconds including the body.
+
 use std::time::{Duration, Instant};
 
 use axum::{

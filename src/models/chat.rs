@@ -1,3 +1,5 @@
+//! JSON for `POST /v1/decisions/chat`. The request content is never serialized back.
+
 use serde::{Deserialize, Serialize};
 
 use crate::domain::detectors::Finding;

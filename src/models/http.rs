@@ -1,3 +1,5 @@
+//! JSON for `POST /v1/decisions/http`: method, path, and the decision.
+
 use serde::{Deserialize, Serialize};
 
 #[derive(Deserialize)]

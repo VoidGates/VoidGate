@@ -1,3 +1,5 @@
+//! Path decision: allow, or decoy when the path is on the configured list.
+
 use crate::{
     domain::policy::{valid_path, Decision, ExactPathPolicy},
     error::AppError,

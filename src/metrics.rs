@@ -1,3 +1,5 @@
+//! Counters for `GET /metrics`. Totals only: no message content, path, or key.
+
 use std::{
     sync::atomic::{AtomicU64, Ordering},
     time::Duration,

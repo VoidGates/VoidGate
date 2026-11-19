@@ -28,6 +28,7 @@ Uma variável definida no ambiente do processo sempre vence o `.env`. Em produç
 | `VOIDGATE_BIND` | Não | Endereço de escuta; padrão: `127.0.0.1:8080`. |
 | `VOIDGATE_RATE_LIMIT_PER_MINUTE` | Não | Pedidos de decisão por minuto para a credencial; de 1 a 10000, padrão: `60`. |
 | `VOIDGATE_DEV_DOCS` | Não | `1` liga a tela de testes em `/docs`; `0` ou ausente desliga. Só existe em build de desenvolvimento. |
+| `VOIDGATE_UPSTREAM_URL` | Não | URL `http` ou `https` do modelo, sem usuário na URL. Ausente: `POST /v1/proxy/chat` responde 503. |
 
 Sem `.env`, exemplo para gerar uma chave no PowerShell e rodar só com variáveis de ambiente:
 
@@ -47,7 +48,8 @@ O processo se recusa a iniciar, com uma mensagem `error: ...`, quando a configur
 - caminho de isca inválido, `VOIDGATE_BIND` inválido ou porta em uso;
 - `.env` ilegível (por exemplo, salvo em UTF-16 pelo PowerShell);
 - nome desconhecido com prefixo `VOIDGATE_`, no `.env` ou no ambiente, como `VOIDGATE_DECOY_PATH` sem o S;
-- `VOIDGATE_DEV_DOCS` diferente de `0` e `1`, ou `VOIDGATE_RATE_LIMIT_PER_MINUTE` que não seja um número de 1 a 10000.
+- `VOIDGATE_DEV_DOCS` diferente de `0` e `1`, ou `VOIDGATE_RATE_LIMIT_PER_MINUTE` que não seja um número de 1 a 10000;
+- `VOIDGATE_UPSTREAM_URL` que não seja `http` ou `https`, ou que tenha espaço, caractere de controle ou `@`.
 
 Ao subir, o processo imprime `voidgate listening on http://<endereço>`. Os valores opcionais ausentes usam os padrões acima.
 
@@ -144,6 +146,16 @@ Na prática, isso define onde cada mudança entra:
 - Regra de decisão nova, como um detector: só em `domain/`.
 - Erro novo: uma variante em `AppError`.
 
+Cada pasta do repositório tem um `README.md` com o que ela é e o que cuida.
+
+```text
+src/       API
+web/       site
+tests/     suíte da API pública e da demonstração
+docs/      documentação do produto
+.github/   integração contínua
+```
+
 ### Estrutura de pastas
 
 ```text
@@ -170,6 +182,7 @@ src/
 
 - `GET /health` e `GET /live` indicam que o processo está ativo. `GET /ready` verifica se o estado em memória do limitador está disponível. Não há dependências externas configuradas nesta etapa.
 - `POST /v1/decisions/http` exige `x-voidgate-key` e JSON com `method` e `path`. O corpo é limitado a 4 KiB.
+- `POST /v1/proxy/chat` recebe o chat no lugar do modelo. O corpo segue o formato `{model, messages:[{role, content}]}` e `content` precisa ser texto. Sem `VOIDGATE_UPSTREAM_URL` a resposta é 503. `block` não chama o modelo e devolve uma recusa genérica. `mask` troca o trecho por `[redacted]` na ida e na volta. O cabeçalho `Authorization` segue para o modelo; `x-voidgate-key` não segue.
 
 Exemplo no PowerShell, em outro terminal que também tenha `VOIDGATE_API_KEY` definida:
 
@@ -192,7 +205,7 @@ Decide se uma mensagem de chat pode seguir. Exige `x-voidgate-key` e JSON com ex
 
 O corpo desta rota é limitado a 100 KiB, para que um `content` de 16 KiB caiba mesmo quando o JSON escapa cada caractere como `\uXXXX`. O `content` é inspecionado em memória e descartado: ele **nunca** aparece na resposta nem em logs; a resposta só traz posições em bytes do texto original.
 
-Resposta: `{"action":"allow"|"block","reason_codes":[...],"findings":[{"code","detector","start","end"}],"truncated":false}`. `start` e `end` são offsets em bytes (fim exclusivo) do `content` enviado. Sem ocorrências, `action` é `allow` e as duas listas vêm vazias.
+Resposta: `{"action":"allow"|"mask"|"block","reason_codes":[...],"findings":[{"code","detector","start","end"}],"truncated":false}`. `start` e `end` são offsets em bytes (fim exclusivo) do `content` enviado. Sem ocorrências, `action` é `allow` e as duas listas vêm vazias. Dado pessoal sozinho produz `mask`. Qualquer outro achado produz `block`, e o `block` vence o `mask`. A resposta não traz o texto mascarado: só as posições.
 
 Caracteres ocultos seguidos formam um único item em `findings`, então uma frase escondida é um intervalo só. A lista traz no máximo 100 itens; `truncated` vem `true` quando havia mais. A decisão considera todas as ocorrências, mesmo as não listadas.
 
@@ -201,6 +214,8 @@ Códigos de motivo (`reason_codes`) nesta versão:
 | Código | Detector | Dispara quando |
 | --- | --- | --- |
 | `content.invisible_unicode` | `invisible_unicode` | O texto contém um caractere que a pessoa não vê, mas o modelo lê. Qualquer ocorrência fora das exceções abaixo gera `block`. |
+| `content.prompt_injection` | `prompt_injection` | Frase de manipulação de instrução, em várias línguas, ou um token de controle de modelo. Gera `block`. |
+| `content.personal_data` | `personal_data` | E-mail, telefone E.164, cartão, IBAN, CPF, CNPJ ou SSN. Sozinho, gera `mask`. |
 
 Caracteres tratados como ocultos:
 
@@ -249,9 +264,11 @@ Os detectores ficam em `src/domain/detectors/`, cada um implementando o trait `D
 
 ```text
 cargo fmt --all -- --check
-cargo clippy --locked --all-targets -- -D warnings
-cargo test --locked --all-targets
+cargo clippy --locked --workspace --all-targets -- -D warnings
+cargo test --locked --workspace --all-targets
 ```
+
+Na pasta `web/`: `npm test`. Na pasta `tests/`: `powershell -File .\run.ps1`.
 
 ## O que o gateway precisa fazer
 

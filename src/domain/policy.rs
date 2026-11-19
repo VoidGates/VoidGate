@@ -1,3 +1,5 @@
+//! Exact decoy paths. A path is a decoy only when it equals one configured path.
+
 use std::collections::HashSet;
 
 pub(crate) struct ExactPathPolicy {

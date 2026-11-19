@@ -1,9 +1,11 @@
 name: CI
 
-# Lint + tests + build on every PR and in the merge queue. Separate from the deploy
-# workflow so PR code never runs with the Pages/OIDC permissions.
+# Lint + tests + build on a direct push to develop, on every PR, and in the merge queue.
+# Separate from the deploy workflow so this job never runs with the Pages/OIDC permissions.
 on:
   pull_request:
+  push:
+    branches: [develop]
   merge_group:
 
 permissions:

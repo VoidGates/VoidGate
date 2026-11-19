@@ -1,5 +1,7 @@
 # Integração contínua
 
+Este texto aparece quando a pasta `.github` está aberta. A entrada do repositório é o `README.md` da raiz.
+
 | Pasta | O que cuida |
 | --- | --- |
 | `workflows/` | O que roda no GitHub a cada pull request e a cada push. |

@@ -1,5 +1,7 @@
 <p align="center">
-  <img src="VoidGate.jpg" alt="VoidGate" width="480">
+  <a href="https://voidgates.github.io/VoidGate/">
+    <img src="VoidGate.jpg" alt="VoidGate" width="480">
+  </a>
 </p>
 
 <p align="center">
@@ -7,7 +9,7 @@
 </p>
 
 <p align="center">
-  <a href="https://voidgates.github.io/VoidGate/">Site</a>
+  <a href="https://voidgates.github.io/VoidGate/">Página principal</a>
   ·
   <a href="docs/voidgate-documentacao.md">Documentação</a>
   ·

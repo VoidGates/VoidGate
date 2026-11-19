@@ -4,7 +4,7 @@ A versão do VoidGate é uma só para a API e para o site. A tag `v0.1.0` marca 
 
 ## [0.1.0] - 2026-11-19
 
-### Agora
+### 2026-11-19
 
 - A API e o site passam a viver neste repositório, em `src/` e `web/`.
 - A decisão de chat é `allow`, `mask` ou `block`. Bloqueio vence máscara.

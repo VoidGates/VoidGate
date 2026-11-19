@@ -260,6 +260,10 @@ Resposta: `{"action":"block","reason_codes":["content.invisible_unicode"],"findi
 
 Os detectores ficam em `src/domain/detectors/`, cada um implementando o trait `Detector`; novos detectores entram na lista `default_detectors()` sem alterar o handler nem o service.
 
+## Versão
+
+A API e o site usam o mesmo número. Na `main`, um commit `feat:` sobe o minor, `fix:` sobe o patch, e `feat!:`, `fix!:` ou `BREAKING CHANGE` sobe o major. O número fica em `Cargo.toml`, `web/package.json` e `CHANGELOG.md`. A tag é `vX.Y.Z`.
+
 ## Verificação
 
 ```text

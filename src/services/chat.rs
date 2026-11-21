@@ -40,6 +40,44 @@ pub(crate) fn action_of(findings: &[Finding]) -> &'static str {
     }
 }
 
+/// The outcome of a whole exchange: the most severe action seen
+/// (`block` > `mask` > `allow`) and the reason codes of every piece, each once.
+/// The proxy builds one per request and one per model reply.
+pub(crate) struct Verdict {
+    pub(crate) action: &'static str,
+    pub(crate) reason_codes: Vec<&'static str>,
+}
+
+impl Verdict {
+    pub(crate) fn allow() -> Self {
+        Self {
+            action: ACTION_ALLOW,
+            reason_codes: Vec::new(),
+        }
+    }
+
+    /// Folds in the findings of one more piece of text.
+    pub(crate) fn absorb(&mut self, findings: &[Finding]) {
+        let action = action_of(findings);
+        if severity(action) > severity(self.action) {
+            self.action = action;
+        }
+        for finding in findings {
+            if !self.reason_codes.contains(&finding.code) {
+                self.reason_codes.push(finding.code);
+            }
+        }
+    }
+}
+
+fn severity(action: &str) -> u8 {
+    match action {
+        ACTION_BLOCK => 2,
+        ACTION_MASK => 1,
+        _ => 0,
+    }
+}
+
 /// What the assistant says is `output`; what the user or the system sends is `input`.
 pub(crate) fn direction_of(role: &Role) -> Direction {
     match role {

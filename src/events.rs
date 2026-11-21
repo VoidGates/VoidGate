@@ -27,10 +27,6 @@ pub(crate) const WINDOW_MS: u64 = 30 * 60 * 1_000;
 #[serde(rename_all = "snake_case")]
 pub(crate) enum Route {
     DecisionsChat,
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "recorded by /v1/proxy/chat in step 3")
-    )]
     ProxyChat,
 }
 

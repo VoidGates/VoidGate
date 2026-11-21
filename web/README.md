@@ -39,6 +39,12 @@ código aberto e planos. As animações param para quem ativa "reduzir movimento
 e-mail, telefone, cartão e IBAN). Não é o motor da API e não envia nada
 para servidor nenhum. Um caractere invisível sozinho é removido aqui; na API, ele bloqueia.
 
+O painel de monitoramento fica em `#painel` (link "Painel" no topo). Mostra os
+totais dos últimos 30 minutos e a situação de cada tipo de ameaça (prompt
+injection, informação indevida e fraude por arquivo). Por enquanto os dados são
+simulados no navegador, com aviso na tela e botão de pausar; o código fica em
+`src/dashboard/`.
+
 ## Stack
 
 React 19 + TypeScript + Vite, CSS puro. Fontes abertas (Bricolage Grotesque,

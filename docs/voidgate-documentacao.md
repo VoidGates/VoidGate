@@ -105,6 +105,7 @@ Isto está no código do backend 0.1.0:
 | Limite de uso por credencial | `VOIDGATE_RATE_LIMIT_PER_MINUTE` |
 | Limite de decisões simultâneas e tempo máximo por decisão | 256 em paralelo; 5 segundos |
 | Métricas agregadas | `GET /metrics`, com a chave da API |
+| Eventos de decisão, só metadados | `GET /v1/events`, com a chave da API |
 | Saúde do processo | `GET /health`, `GET /live`, `GET /ready` |
 | Autenticação por chave | Cabeçalho `x-voidgate-key` |
 | Erro em formato único | `error.code` e `error.message` fixos |
@@ -269,8 +270,17 @@ Sem chave válida, toda rota que não seja de saúde devolve o mesmo 401, exista
 | `GET /live` | O processo está ativo. |
 | `GET /ready` | O estado em memória do limitador está disponível. |
 | `GET /metrics` | Exige a chave. Só contadores agregados, sem conteúdo, caminho ou credencial. |
+| `GET /v1/events` | Exige a chave. As decisões recentes, só metadados. Veja “Eventos de decisão”. |
 
 Não há dependência externa configurada nesta etapa.
+
+### Eventos de decisão
+
+`GET /v1/events` devolve `{"events": [...]}` com as decisões dos últimos 30 minutos, no máximo 1000, do mais antigo para o mais novo. Cada evento tem `id`, `timestamp_ms`, `route` (`decisions_chat` ou `proxy_chat`), `direction` (`input` ou `output`), `action` e `reason_codes`. Não há texto, trecho, posição, pontuação nem regra. A resposta leva `Cache-Control: no-store`. A rota exige a chave, não consome o limite de decisões e não deve ser chamada do navegador.
+
+Em `POST /v1/decisions/chat`, o papel `assistant` gera `output`; `user` e `system` geram `input`. Em `POST /v1/proxy/chat` há um evento `input` por requisição, com a pior ação entre as mensagens, assim que a decisão sai, e um `output` só se o modelo respondeu. Erro de validação não gera evento.
+
+Os eventos ficam na memória do processo, até 10 000, e se perdem ao reiniciar. Cada réplica tem os seus. Se o registro estiver quebrado, a leitura responde 503. A decisão não muda: a falha de gravação é contada em `voidgate_event_record_errors_total`, em `GET /metrics`.
 
 ### O que esta API não é
 

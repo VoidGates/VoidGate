@@ -13,7 +13,8 @@ Cuida da decisão e, quando há um modelo configurado, do encaminhamento do chat
 | `runtime.rs` | No máximo 256 decisões ao mesmo tempo e 5 segundos cada. |
 | `rate_limit.rs` | Pedidos por minuto da credencial. |
 | `metrics.rs` | Contadores de `GET /metrics`. |
-| `state.rs` | Configuração lida uma vez na partida. |
+| `events.rs` | Registro em memória das decisões, só metadados, lido por `GET /v1/events`. |
+| `state.rs` | Configuração lida na partida e o estado em memória: limite, contadores e eventos. |
 | `error.rs` | O único formato de erro. |
 | `handlers/` | Entrada HTTP. |
 | `services/` | Regra de cada rota. |

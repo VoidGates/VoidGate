@@ -3,6 +3,7 @@
 pub(crate) mod chat;
 #[cfg(debug_assertions)]
 pub(crate) mod docs;
+pub(crate) mod events;
 pub(crate) mod health;
 pub(crate) mod http;
 pub(crate) mod proxy;

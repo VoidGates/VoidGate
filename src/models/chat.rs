@@ -9,9 +9,7 @@ use crate::domain::detectors::Finding;
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]
 pub(crate) struct ChatDecisionRequest {
-    // Validated on parse so the contract is enforced now; no detector reads
-    // it yet, which is why the compiler would otherwise flag it as unused.
-    #[allow(dead_code)]
+    /// Validated on parse; it only decides the direction of the recorded event.
     pub(crate) role: Role,
     pub(crate) content: String,
 }

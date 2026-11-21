@@ -3,7 +3,8 @@
 use crate::{
     domain::detectors::{personal_data, Detector, Finding},
     error::AppError,
-    models::chat::{ChatDecisionRequest, ChatDecisionResponse},
+    events::Direction,
+    models::chat::{ChatDecisionRequest, ChatDecisionResponse, Role},
 };
 
 /// Maximum size of `content`, in UTF-8 bytes.
@@ -39,6 +40,52 @@ pub(crate) fn action_of(findings: &[Finding]) -> &'static str {
     }
 }
 
+/// The outcome of a whole exchange: the most severe action seen
+/// (`block` > `mask` > `allow`) and the reason codes of every piece, each once.
+/// The proxy builds one per request and one per model reply.
+pub(crate) struct Verdict {
+    pub(crate) action: &'static str,
+    pub(crate) reason_codes: Vec<&'static str>,
+}
+
+impl Verdict {
+    pub(crate) fn allow() -> Self {
+        Self {
+            action: ACTION_ALLOW,
+            reason_codes: Vec::new(),
+        }
+    }
+
+    /// Folds in the findings of one more piece of text.
+    pub(crate) fn absorb(&mut self, findings: &[Finding]) {
+        let action = action_of(findings);
+        if severity(action) > severity(self.action) {
+            self.action = action;
+        }
+        for finding in findings {
+            if !self.reason_codes.contains(&finding.code) {
+                self.reason_codes.push(finding.code);
+            }
+        }
+    }
+}
+
+fn severity(action: &str) -> u8 {
+    match action {
+        ACTION_BLOCK => 2,
+        ACTION_MASK => 1,
+        _ => 0,
+    }
+}
+
+/// What the assistant says is `output`; what the user or the system sends is `input`.
+pub(crate) fn direction_of(role: &Role) -> Direction {
+    match role {
+        Role::Assistant => Direction::Output,
+        Role::User | Role::System => Direction::Input,
+    }
+}
+
 pub(crate) fn decide(
     detectors: &[Box<dyn Detector>],
     input: &ChatDecisionRequest,
@@ -48,21 +95,17 @@ pub(crate) fn decide(
     }
 
     let mut findings = inspect(detectors, &input.content);
-    let action = action_of(&findings);
-    let mut reason_codes: Vec<&'static str> = Vec::new();
-    for finding in &findings {
-        if !reason_codes.contains(&finding.code) {
-            reason_codes.push(finding.code);
-        }
-    }
+    // Folded before truncating: the decision still counts every finding.
+    let mut verdict = Verdict::allow();
+    verdict.absorb(&findings);
 
     // Bounds the response: without it a 16 KiB message could ask for one of ~400 KiB.
     let truncated = findings.len() > MAX_FINDINGS;
     findings.truncate(MAX_FINDINGS);
 
     Ok(ChatDecisionResponse {
-        action,
-        reason_codes,
+        action: verdict.action,
+        reason_codes: verdict.reason_codes,
         findings,
         truncated,
     })

@@ -8,6 +8,7 @@
 mod auth;
 mod domain;
 mod error;
+mod events;
 mod handlers;
 mod metrics;
 mod models;
@@ -64,15 +65,19 @@ pub fn app(state: AppState) -> Router {
             rate_limit::enforce,
         ));
 
-    // Scrapes are authenticated but do not consume decision capacity.
-    let metrics = Router::new().route("/metrics", get(metrics::export));
+    // Scrapes and event reads are authenticated but do not consume decision
+    // capacity or the rate limit. (`events` here is the crate module, so the
+    // handler is named by its full path.)
+    let operations = Router::new()
+        .route("/metrics", get(metrics::export))
+        .route("/v1/events", get(handlers::events::list));
 
     // `layer` (not `route_layer`) so the fallback is authenticated too: without
     // a valid key, an unknown route answers exactly like a real one.
     let protected = Router::new()
         .merge(decisions)
         .merge(proxied)
-        .merge(metrics)
+        .merge(operations)
         .fallback(error::not_found)
         .method_not_allowed_fallback(error::method_not_allowed)
         .layer(middleware::from_fn_with_state(
@@ -417,6 +422,7 @@ mod tests {
         let (status, body) = send(router.clone(), "GET", "/metrics", true).await;
         assert_eq!(status, StatusCode::OK);
         assert!(body.contains("voidgate_authenticated_decisions_total"));
+        assert!(body.contains("voidgate_event_record_errors_total 0"));
         assert!(
             !body.contains("a".repeat(32).as_str()),
             "metrics leak the key"
@@ -485,6 +491,7 @@ mod tests {
             "/live",
             "/ready",
             "/metrics",
+            "/v1/events",
             "/v1/decisions/http",
             "/v1/decisions/chat",
             "/v1/proxy/chat",

@@ -73,7 +73,8 @@ export function EventDetail({ event }: { event: PanelEvent | null }) {
     return <aside className="detail detail--empty">{copy.events.empty}</aside>
   }
   const info = copy.detail[event.category]
-  const risk = riskFor(event.score)
+  // Real events carry no text, score or channel: those parts only show when present.
+  const risk = event.score === undefined ? null : riskFor(event.score)
   const time = new Intl.DateTimeFormat(lang === 'pt' ? 'pt-BR' : 'en-US', {
     day: '2-digit',
     month: '2-digit',
@@ -100,12 +101,16 @@ export function EventDetail({ event }: { event: PanelEvent | null }) {
         </>
       )}
 
-      <p className="detail__label">
-        {event.file ? copy.detail.hidden : isOutput ? copy.detail.answer : copy.detail.message}
-      </p>
-      <p className={`detail__box detail__box--${event.category}`}>{event.snippet}</p>
+      {event.snippet !== undefined && (
+        <>
+          <p className="detail__label">
+            {event.file ? copy.detail.hidden : isOutput ? copy.detail.answer : copy.detail.message}
+          </p>
+          <p className={`detail__box detail__box--${event.category}`}>{event.snippet}</p>
+        </>
+      )}
 
-      {!isOutput && (
+      {!isOutput && received !== undefined && (
         <>
           <p className="detail__label">{copy.detail.received}</p>
           <p className="detail__box detail__box--muted">{received}</p>
@@ -117,15 +122,23 @@ export function EventDetail({ event }: { event: PanelEvent | null }) {
         <dd>{time.format(event.timestamp)}</dd>
         <dt>{copy.detail.rule}</dt>
         <dd className="detail__rule">{event.ruleId}</dd>
-        <dt>{copy.detail.channel}</dt>
-        <dd>{event.channel}</dd>
-        <dt>{copy.detail.risk}</dt>
-        <dd>
-          {copy.detail.risks[risk]} ({number.format(event.score)})
-          <span className={`detail__risk detail__risk--${risk}`} aria-hidden="true">
-            <i style={{ width: `${Math.round(event.score * 100)}%` }} />
-          </span>
-        </dd>
+        {event.channel !== undefined && (
+          <>
+            <dt>{copy.detail.channel}</dt>
+            <dd>{event.channel}</dd>
+          </>
+        )}
+        {risk !== null && event.score !== undefined && (
+          <>
+            <dt>{copy.detail.risk}</dt>
+            <dd>
+              {copy.detail.risks[risk]} ({number.format(event.score)})
+              <span className={`detail__risk detail__risk--${risk}`} aria-hidden="true">
+                <i style={{ width: `${Math.round(event.score * 100)}%` }} />
+              </span>
+            </dd>
+          </>
+        )}
       </dl>
     </aside>
   )

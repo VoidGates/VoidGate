@@ -43,7 +43,35 @@ O painel de monitoramento fica em `#painel` (link "Painel" no topo). Mostra o
 rio ao vivo (cada mensagem atravessa o portão, e os ataques param nele), os
 totais dos últimos 30 minutos, a situação de cada tipo de ameaça (prompt
 injection, informação indevida e fraude por arquivo), as ameaças por minuto e a
-lista dos casos recentes, com filtros e o detalhe de cada um em linguagem simples. Por enquanto os dados são
+lista dos casos recentes, com filtros e o detalhe de cada um em linguagem simples.
+
+### Painel com os dados reais da API
+
+O site publicado mostra sempre dados simulados: ele não tem a chave da API, e a
+chave nunca deve ir para o navegador. Para ver os eventos reais
+(`GET /v1/events`), rode a API e o site na mesma máquina, com a mesma chave nos
+dois terminais:
+
+```cmd
+:: terminal 1, na raiz do repositório
+set VOIDGATE_API_KEY=<a chave da API>
+cargo run --locked
+
+:: terminal 2, em web/
+set VOIDGATE_API_KEY=<a mesma chave>
+npm run dev
+```
+
+Abra `http://localhost:5173/#painel`. O servidor de desenvolvimento repassa
+`/api` para a API e acrescenta a chave no caminho, do lado do servidor. O selo
+do topo passa a dizer "Dados reais da API local". Se a API não responder quando
+a página abre, o painel fica nos dados simulados; depois de subir a API,
+recarregue a página. Não use `npm run dev -- --host`: com ele, outras máquinas
+da rede poderiam usar a API com a sua chave através do proxy.
+
+Os eventos reais trazem só metadados (horário, ação, entrada ou resposta, rota
+e motivos). Por isso, nesse modo o painel não mostra trecho da mensagem, risco
+nem canal. Por enquanto os dados são
 simulados no navegador, com aviso na tela e botão de pausar; o código fica em
 `src/dashboard/`.
 

@@ -79,7 +79,8 @@ test('simulação: nenhum trecho traz CPF, cartão ou e-mail sem máscara', () =
   for (let i = 0; i < 2000; i++) events.push(simulator.next(NOW + i * 1000))
   const clear = [/\d{3}\.\d{3}\.\d{3}-\d{2}/, /\d{4} \d{4} \d{4} \d{4}/, /[a-z0-9._-]{2,}@/i]
   for (const e of events) {
-    for (const pattern of clear) assert.doesNotMatch(e.snippet, pattern, e.snippet)
+    assert.equal(typeof e.snippet, 'string', 'evento simulado sempre tem trecho')
+    for (const pattern of clear) assert.doesNotMatch(e.snippet ?? '', pattern, e.snippet)
   }
 })
 

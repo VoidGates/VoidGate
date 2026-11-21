@@ -13,6 +13,10 @@ export default defineConfig({
       '/api': {
         target: process.env.VITE_API_URL ?? 'http://localhost:8080',
         rewrite: (path) => path.replace(/^\/api/, ''),
+        // O painel lê GET /v1/events com a chave da API. A chave vem do ambiente
+        // do servidor de desenvolvimento e entra só aqui, no proxy: sem o prefixo
+        // VITE_, ela nunca vai para o código do navegador.
+        headers: process.env.VOIDGATE_API_KEY ? { 'x-voidgate-key': process.env.VOIDGATE_API_KEY } : undefined,
       },
     },
   },

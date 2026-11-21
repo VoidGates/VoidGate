@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { allStatuses, latestThreats, recentlyBlocked, threatsPerMinute, totals } from '../dashboard/status.ts'
 import type { EventFilter } from '../dashboard/status.ts'
 import type { CategoryStatus } from '../dashboard/status.ts'
-import { useSimulatedEvents } from '../dashboard/useSimulatedEvents.ts'
+import { useEventFeed } from '../dashboard/useEventFeed.ts'
 import { useLang } from '../i18n.tsx'
 import { DashboardChart } from './DashboardChart.tsx'
 import { EventDetail, EventList } from './DashboardEvents.tsx'
@@ -28,7 +28,7 @@ export function Dashboard() {
   const { lang, text, toggle } = useLang()
   const copy = text.panel
   const [paused, setPaused] = useState(false)
-  const { events, now } = useSimulatedEvents(paused)
+  const { events, now, source } = useEventFeed(paused)
   const [filter, setFilter] = useState<EventFilter>('all')
   // null follows the newest threat; a click pins the chosen one while it stays in the window.
   const [pinnedId, setPinnedId] = useState<string | null>(null)
@@ -65,9 +65,9 @@ export function Dashboard() {
           </nav>
         </div>
         <div className="dash__controls">
-          <span className="dash__demo">
+          <span className={`dash__demo dash__demo--${source}`}>
             <span className="dot" aria-hidden="true" />
-            {copy.demo}
+            {source === 'api' ? copy.live : source === 'stale' ? copy.stale : copy.demo}
           </span>
           <button type="button" className="dash__button" aria-pressed={paused} onClick={() => setPaused((value) => !value)}>
             {paused ? copy.resume : copy.pause}

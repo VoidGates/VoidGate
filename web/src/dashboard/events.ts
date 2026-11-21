@@ -16,11 +16,17 @@ export type PanelEvent = {
   action: Action
   direction: 'input' | 'output'
   ruleId: string
-  score: number
+  /**
+   * The fields below exist only in simulated events. Real events from the API
+   * carry metadata only: no text, score, channel or file, by design.
+   */
+  score?: number
   /** Already masked: the panel never receives personal data in clear. */
-  snippet: string
-  channel: string
+  snippet?: string
+  channel?: string
   file?: { name: string; page: number }
+  /** Only in real events: which API route made the decision. */
+  route?: 'decisions_chat' | 'proxy_chat'
 }
 
 export const CATEGORIES: Category[] = ['prompt_injection', 'sensitive_data', 'file_fraud']

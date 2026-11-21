@@ -8,6 +8,7 @@
 mod auth;
 mod domain;
 mod error;
+mod events;
 mod handlers;
 mod metrics;
 mod models;

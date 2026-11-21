@@ -52,6 +52,9 @@ function gh(args, env) {
 function writeVersion(version, from, notes) {
   const cargo = 'Cargo.toml'
   writeFileSync(cargo, readFileSync(cargo, 'utf8').replace(`version = "${from}"`, `version = "${version}"`))
+  const cargoLock = 'Cargo.lock'
+  const cargoMarker = `name = "voidgate"\nversion = "${from}"`
+  writeFileSync(cargoLock, readFileSync(cargoLock, 'utf8').replace(cargoMarker, `name = "voidgate"\nversion = "${version}"`))
   const packageJson = 'web/package.json'
   writeFileSync(packageJson, readFileSync(packageJson, 'utf8').replace(`"version": "${from}"`, `"version": "${version}"`))
   const lock = 'web/package-lock.json'
@@ -87,7 +90,7 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
   }
   const branch = `release/v${bump.version}`
   git(['checkout', '-b', branch])
-  git(['add', '--', 'Cargo.toml', 'web/package.json', 'web/package-lock.json', 'CHANGELOG.md'])
+  git(['add', '--', 'Cargo.toml', 'Cargo.lock', 'web/package.json', 'web/package-lock.json', 'CHANGELOG.md'])
   git(['commit', '-m', message], env)
   const sha = git(['rev-parse', 'HEAD'])
   git(['push', 'origin', `HEAD:refs/heads/${branch}`])

@@ -33,6 +33,9 @@ export function Nav() {
           </li>
         </ul>
       </nav>
+      <a className="nav__panel" href="#painel">
+        {text.nav.panel}
+      </a>
     </header>
   )
 }

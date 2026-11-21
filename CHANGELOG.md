@@ -2,6 +2,11 @@
 
 A versão do VoidGate é uma só para a API e para o site. A tag `v0.1.0` marca a primeira versão. Daqui em diante, um commit `feat:` na `main` sobe o minor, um `fix:` sobe o patch, e `feat!:`, `fix!:` ou `BREAKING CHANGE` sobe o major. O resto não gera versão.
 
+## [0.2.0] - 2026-11-21
+
+- feat(web): add event list, filters and plain-language detail to the panel
+- feat(web): add live river and threats-per-minute chart to the panel
+- feat(web): add monitoring panel with simulated events and threat status
 ## [0.1.0] - 2026-11-19
 
 ### 2026-11-19

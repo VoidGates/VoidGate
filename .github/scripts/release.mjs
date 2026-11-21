@@ -45,6 +45,10 @@ function git(args, env) {
   return execFileSync('git', args, { encoding: 'utf8', env }).trim()
 }
 
+function gh(args, env) {
+  return execFileSync('gh', args, { encoding: 'utf8', env }).trim()
+}
+
 function writeVersion(version, from, notes) {
   const cargo = 'Cargo.toml'
   writeFileSync(cargo, readFileSync(cargo, 'utf8').replace(`version = "${from}"`, `version = "${version}"`))
@@ -81,10 +85,15 @@ if (process.argv[1] === fileURLToPath(import.meta.url)) {
     GIT_COMMITTER_NAME: 'github-actions[bot]',
     GIT_COMMITTER_EMAIL: '41898282+github-actions[bot]@users.noreply.github.com',
   }
+  const branch = `release/v${bump.version}`
+  git(['checkout', '-b', branch])
   git(['add', '--', 'Cargo.toml', 'web/package.json', 'web/package-lock.json', 'CHANGELOG.md'])
   git(['commit', '-m', message], env)
-  git(['tag', '-a', `v${bump.version}`, '-m', `VoidGate ${bump.version}`], env)
-  git(['push', 'origin', 'HEAD'])
-  git(['push', 'origin', `v${bump.version}`])
+  const sha = git(['rev-parse', 'HEAD'])
+  git(['push', 'origin', `HEAD:refs/heads/${branch}`])
+  gh(['pr', 'create', '--base', 'main', '--head', branch, '--title', message.split('\n')[0], '--body', message], env)
+  gh(['pr', 'merge', branch, '--merge'], env)
+  git(['tag', '-a', `v${bump.version}`, sha, '-m', `VoidGate ${bump.version}`], env)
+  git(['push', 'origin', `refs/tags/v${bump.version}`])
   console.log(`released ${bump.version}`)
 }

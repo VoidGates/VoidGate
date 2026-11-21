@@ -1,8 +1,10 @@
 import { useState } from 'react'
-import { allStatuses, totals } from '../dashboard/status.ts'
+import { allStatuses, recentlyBlocked, threatsPerMinute, totals } from '../dashboard/status.ts'
 import type { CategoryStatus } from '../dashboard/status.ts'
 import { useSimulatedEvents } from '../dashboard/useSimulatedEvents.ts'
 import { useLang } from '../i18n.tsx'
+import { DashboardChart } from './DashboardChart.tsx'
+import { DashboardRiver } from './DashboardRiver.tsx'
 import { Logo } from './Logo.tsx'
 
 function Sparkline({ values }: { values: number[] }) {
@@ -72,6 +74,8 @@ export function Dashboard() {
         <h1 className="dash__title">{copy.title}</h1>
         <p className="lead">{copy.lead}</p>
 
+        <DashboardRiver events={events} now={now} paused={paused} blocked={recentlyBlocked(events, now)} />
+
         <section className="dash__totals" aria-label={copy.window}>
           <p className="dash__window">{copy.window}</p>
           <dl>
@@ -110,6 +114,8 @@ export function Dashboard() {
             </div>
           ))}
         </section>
+
+        <DashboardChart buckets={threatsPerMinute(events, now)} />
       </main>
     </div>
   )

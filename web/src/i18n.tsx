@@ -111,6 +111,16 @@ const copy = {
       last: 'Último às',
       none: 'Nada nos últimos 15 min',
       rules: { cpf: 'CPF', email: 'e-mail', card: 'cartão', phone: 'telefone', iban: 'IBAN', ssn: 'SSN' },
+      river: {
+        label: 'Cada ponto é uma mensagem chegando. As seguras seguem pelo rio de cima, as com dados pessoais seguem escondidas pelo de baixo, e os ataques param no portão.',
+        arriving: 'Chegando agora',
+        passed: 'Seguiram para a IA',
+        blocked: 'bloqueadas em 5 min',
+      },
+      chart: {
+        title: 'Ameaças por minuto',
+        label: 'Ameaças por minuto nos últimos 30 minutos.',
+      },
     },
     footer: 'Feito no Amazonas para o HackBrasil 2026.',
     try: {
@@ -249,6 +259,16 @@ const copy = {
       last: 'Last at',
       none: 'Nothing in the last 15 min',
       rules: { cpf: 'CPF', email: 'email', card: 'card', phone: 'phone', iban: 'IBAN', ssn: 'SSN' },
+      river: {
+        label: 'Each dot is an incoming message. Safe ones follow the upper river, ones with personal data follow the lower one already hidden, and attacks stop at the gate.',
+        arriving: 'Arriving now',
+        passed: 'Went on to the AI',
+        blocked: 'blocked in 5 min',
+      },
+      chart: {
+        title: 'Threats per minute',
+        label: 'Threats per minute over the last 30 minutes.',
+      },
     },
     footer: 'Built in Amazonas, Brazil, for HackBrasil 2026.',
     try: {

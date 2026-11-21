@@ -68,3 +68,27 @@ export function totals(events: PanelEvent[]): Totals {
   }
   return result
 }
+
+export type MinuteBucket = { start: number } & Record<Category, number>
+
+/** Threats per minute over the last `minutes`, oldest first, for the stacked chart. */
+export function threatsPerMinute(events: PanelEvent[], now: number, minutes = 30): MinuteBucket[] {
+  const from = now - minutes * MINUTE
+  const buckets: MinuteBucket[] = Array.from({ length: minutes }, (_, index) => ({
+    start: from + index * MINUTE,
+    prompt_injection: 0,
+    sensitive_data: 0,
+    file_fraud: 0,
+  }))
+  for (const event of events) {
+    if (event.category === null || event.timestamp <= from || event.timestamp > now) continue
+    const index = Math.min(minutes - 1, Math.floor((event.timestamp - from) / MINUTE))
+    buckets[index][event.category] += 1
+  }
+  return buckets
+}
+
+/** Messages blocked in the last `minutes`, oldest first. */
+export function recentlyBlocked(events: PanelEvent[], now: number, minutes = 5): PanelEvent[] {
+  return events.filter((e) => e.action === 'block' && e.timestamp > now - minutes * MINUTE && e.timestamp <= now)
+}

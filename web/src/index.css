@@ -1376,3 +1376,251 @@ textarea:focus-visible {
     border-top: none;
   }
 }
+
+/* Panel river: dots are positioned only by their animation (SVG user units). */
+
+.river {
+  margin: 28px 0 0;
+  padding: 18px 22px 14px;
+  border: 1px solid var(--color-clay);
+  border-radius: 20px;
+  background: var(--color-bank);
+}
+
+.river svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.river__in {
+  fill: #221913;
+}
+
+.river__safe {
+  fill: #8a6b3f;
+  opacity: 0.75;
+}
+
+.river__masked {
+  fill: #2a1d15;
+}
+
+.river__gate {
+  fill: var(--color-sand);
+}
+
+.river__lock {
+  fill: var(--color-gold);
+}
+
+.river__caption {
+  fill: var(--color-sand-muted);
+  font-family: var(--font-body);
+  font-size: 12px;
+}
+
+.river__tag rect {
+  fill: var(--color-blocked);
+}
+
+.river__tag text {
+  fill: var(--color-river);
+  font-family: var(--font-body);
+  font-size: 12.5px;
+  font-weight: 600;
+}
+
+.river__dot {
+  opacity: 0;
+  fill: var(--color-sand);
+}
+
+.river__dot--prompt_injection {
+  fill: var(--color-blocked);
+}
+
+.river__dot--sensitive_data {
+  fill: var(--color-gold);
+}
+
+.river__dot--file_fraud {
+  fill: var(--color-file);
+}
+
+/* Full shorthand on purpose: the CSS minifier drops a duration set apart from the name. */
+.river__dot--allow {
+  animation: river-allow 10s linear forwards;
+}
+
+.river__dot--mask {
+  animation: river-mask 10s linear forwards;
+}
+
+.river__dot--block {
+  animation: river-block 10s linear forwards;
+}
+
+.river__piled {
+  opacity: 0.85;
+}
+
+.river.is-paused .river__dot {
+  animation-play-state: paused;
+}
+
+@keyframes river-allow {
+  0% {
+    transform: translate(0, calc(var(--lane) + 0px));
+    opacity: 0;
+  }
+  6% {
+    opacity: 1;
+  }
+  45% {
+    transform: translate(560px, 92px);
+  }
+  55% {
+    transform: translate(640px, 74px);
+  }
+  94% {
+    transform: translate(1150px, 62px);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(1180px, 62px);
+    opacity: 0;
+  }
+}
+
+@keyframes river-mask {
+  0% {
+    transform: translate(0, calc(var(--lane) + 0px));
+    opacity: 0;
+  }
+  6% {
+    opacity: 1;
+  }
+  45% {
+    transform: translate(560px, 98px);
+  }
+  55% {
+    transform: translate(640px, 118px);
+  }
+  94% {
+    transform: translate(1150px, 136px);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(1180px, 136px);
+    opacity: 0;
+  }
+}
+
+@keyframes river-block {
+  0% {
+    transform: translate(0, calc(var(--lane) + 0px));
+    opacity: 0;
+  }
+  6% {
+    opacity: 1;
+  }
+  45%,
+  70% {
+    transform: translate(556px, 95px);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(556px, 95px);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .river__dot {
+    display: none;
+  }
+}
+
+/* Panel chart */
+
+.chart {
+  margin-top: 22px;
+  padding: 18px 22px;
+  border: 1px solid var(--color-clay);
+  border-radius: 20px;
+}
+
+.chart__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+  margin-bottom: 10px;
+}
+
+.chart__head h2 {
+  font-size: 20px;
+}
+
+.chart__legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  color: var(--color-sand-muted);
+  font-size: 13px;
+}
+
+.chart__key {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.chart__key::before {
+  content: '';
+  width: 10px;
+  height: 10px;
+  border-radius: 3px;
+  background: var(--color-blocked);
+}
+
+.chart__key--sensitive_data::before {
+  background: var(--color-gold);
+}
+
+.chart__key--file_fraud::before {
+  background: var(--color-file);
+}
+
+.chart svg {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+.chart__bar {
+  fill: var(--color-blocked);
+}
+
+.chart__bar--sensitive_data {
+  fill: var(--color-gold);
+}
+
+.chart__bar--file_fraud {
+  fill: var(--color-file);
+}
+
+.chart__axis {
+  stroke: var(--color-clay);
+}
+
+.chart__time {
+  fill: var(--color-sand-muted);
+  font-family: var(--font-body);
+  font-size: 12px;
+}

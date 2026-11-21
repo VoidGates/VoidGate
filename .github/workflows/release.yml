@@ -2,13 +2,16 @@ name: Release
 
 # A push to main looks at commits after the latest vX.Y.Z tag.
 # feat raises the minor, fix raises the patch, feat!/fix! or BREAKING CHANGE
-# raises the major. Anything else, including this workflow's own commit, stops.
+# raises the major. Anything else stops.
+# The version commit cannot be pushed straight to main, so the job opens a pull
+# request, merges it, and then pushes the tag.
 on:
   push:
     branches: [main]
 
 permissions:
   contents: write
+  pull-requests: write
 
 jobs:
   release:
@@ -22,3 +25,5 @@ jobs:
           node-version: 22
       - run: node --test .github/scripts/release.test.mjs
       - run: node .github/scripts/release.mjs
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

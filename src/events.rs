@@ -20,6 +20,9 @@ use crate::error::AppError;
 /// Events kept at once; the oldest is dropped first.
 pub(crate) const MAX_EVENTS: usize = 10_000;
 
+/// Events returned by one `GET /v1/events`: the newest ones of the window.
+pub(crate) const MAX_EVENTS_PER_RESPONSE: usize = 1_000;
+
 /// How long an event stays visible, in milliseconds (30 minutes).
 pub(crate) const WINDOW_MS: u64 = 30 * 60 * 1_000;
 
@@ -87,10 +90,6 @@ impl EventLog {
     }
 
     /// At most `limit` events of the window, oldest first.
-    #[cfg_attr(
-        not(test),
-        expect(dead_code, reason = "read by GET /v1/events in step 4")
-    )]
     pub(crate) fn recent(&self, limit: usize) -> Result<Vec<Event>, AppError> {
         let inner = self.inner.lock().map_err(|_| AppError::Unavailable)?;
         Ok(recent_locked(&inner, now_ms()?, limit))
@@ -160,10 +159,6 @@ fn push_locked(
     }
 }
 
-#[cfg_attr(
-    not(test),
-    expect(dead_code, reason = "reached only through `recent` until step 4")
-)]
 fn recent_locked(inner: &Inner, now: u64, limit: usize) -> Vec<Event> {
     // Expired events can still sit in memory when no one has written for a
     // while, so reading filters by the window too.

@@ -7,9 +7,19 @@
 use std::sync::atomic::Ordering;
 
 use crate::{
-    events::{Direction, EventLog, Route},
+    error::AppError,
+    events::{Direction, EventLog, Route, MAX_EVENTS_PER_RESPONSE},
     metrics::Metrics,
+    models::events::EventsResponse,
 };
+
+/// The newest events of the window, oldest first. Unlike recording, reading
+/// is the whole point of the call, so a broken log is an error (`503`).
+pub(crate) fn latest(events: &EventLog) -> Result<EventsResponse, AppError> {
+    Ok(EventsResponse {
+        events: events.recent(MAX_EVENTS_PER_RESPONSE)?,
+    })
+}
 
 pub(crate) fn record_best_effort(
     events: &EventLog,

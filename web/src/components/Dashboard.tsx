@@ -1,9 +1,11 @@
 import { useState } from 'react'
-import { allStatuses, recentlyBlocked, threatsPerMinute, totals } from '../dashboard/status.ts'
+import { allStatuses, latestThreats, recentlyBlocked, threatsPerMinute, totals } from '../dashboard/status.ts'
+import type { EventFilter } from '../dashboard/status.ts'
 import type { CategoryStatus } from '../dashboard/status.ts'
 import { useSimulatedEvents } from '../dashboard/useSimulatedEvents.ts'
 import { useLang } from '../i18n.tsx'
 import { DashboardChart } from './DashboardChart.tsx'
+import { EventDetail, EventList } from './DashboardEvents.tsx'
 import { DashboardRiver } from './DashboardRiver.tsx'
 import { Logo } from './Logo.tsx'
 
@@ -27,6 +29,12 @@ export function Dashboard() {
   const copy = text.panel
   const [paused, setPaused] = useState(false)
   const { events, now } = useSimulatedEvents(paused)
+  const [filter, setFilter] = useState<EventFilter>('all')
+  // null follows the newest threat; a click pins the chosen one while it stays in the window.
+  const [pinnedId, setPinnedId] = useState<string | null>(null)
+  const listed = latestThreats(events, filter)
+  const pinned = pinnedId === null ? undefined : events.find((e) => e.id === pinnedId)
+  const selected = pinned ?? listed[0] ?? null
   const sum = totals(events)
   const statuses = allStatuses(events, now)
   const number = new Intl.NumberFormat(lang === 'pt' ? 'pt-BR' : 'en-US')
@@ -116,6 +124,18 @@ export function Dashboard() {
         </section>
 
         <DashboardChart buckets={threatsPerMinute(events, now)} />
+
+        <div className="dash__split">
+          <EventList
+            events={listed}
+            now={now}
+            filter={filter}
+            onFilter={setFilter}
+            selectedId={selected?.id ?? null}
+            onSelect={setPinnedId}
+          />
+          <EventDetail event={selected} />
+        </div>
       </main>
     </div>
   )

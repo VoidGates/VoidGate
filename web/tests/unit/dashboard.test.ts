@@ -2,7 +2,7 @@ import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { createSimulator, HISTORY_WINDOW, MINUTE } from '../../src/dashboard/events.ts'
 import type { PanelEvent } from '../../src/dashboard/events.ts'
-import { categoryStatus, levelFor, recentlyBlocked, threatsPerMinute, totals } from '../../src/dashboard/status.ts'
+import { categoryStatus, latestThreats, levelFor, recentlyBlocked, riskFor, threatsPerMinute, totals } from '../../src/dashboard/status.ts'
 
 const NOW = Date.UTC(2026, 10, 19, 15, 0, 0)
 
@@ -112,4 +112,22 @@ test('ameaças por minuto: 30 colunas, por tipo, sem contar as liberadas', () =>
 test('bloqueadas nos últimos 5 min ignoram máscaras e eventos antigos', () => {
   const events = [event(1), event(4.9), event(6), event(2, { action: 'mask' })]
   assert.deepEqual(recentlyBlocked(events, NOW).map((e) => e.id), ['evt_1', 'evt_4.9'])
+})
+
+test('lista de eventos: só ameaças, mais nova primeiro, com filtro e limite', () => {
+  const events = [
+    event(5),
+    event(4, { category: null, action: 'allow' }),
+    event(3, { category: 'sensitive_data', action: 'mask' }),
+    event(2),
+    event(1, { category: 'sensitive_data', action: 'mask' }),
+  ]
+  assert.deepEqual(latestThreats(events, 'all').map((e) => e.id), ['evt_1', 'evt_2', 'evt_3', 'evt_5'])
+  assert.deepEqual(latestThreats(events, 'block').map((e) => e.id), ['evt_2', 'evt_5'])
+  assert.deepEqual(latestThreats(events, 'mask').map((e) => e.id), ['evt_1', 'evt_3'])
+  assert.deepEqual(latestThreats(events, 'all', 2).map((e) => e.id), ['evt_1', 'evt_2'])
+})
+
+test('risco: 0,75 ou mais alto, 0,40 ou mais médio, abaixo disso baixo', () => {
+  assert.deepEqual([0.92, 0.75, 0.74, 0.4, 0.39, 0].map(riskFor), ['high', 'high', 'medium', 'medium', 'low', 'low'])
 })

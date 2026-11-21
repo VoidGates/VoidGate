@@ -92,3 +92,25 @@ export function threatsPerMinute(events: PanelEvent[], now: number, minutes = 30
 export function recentlyBlocked(events: PanelEvent[], now: number, minutes = 5): PanelEvent[] {
   return events.filter((e) => e.action === 'block' && e.timestamp > now - minutes * MINUTE && e.timestamp <= now)
 }
+
+export type EventFilter = 'all' | 'block' | 'mask'
+
+/** Threats only (messages that went through untouched are left out), newest first. */
+export function latestThreats(events: PanelEvent[], filter: EventFilter, limit = 12): PanelEvent[] {
+  const result: PanelEvent[] = []
+  for (let i = events.length - 1; i >= 0 && result.length < limit; i--) {
+    const event = events[i]
+    if (event.category === null) continue
+    if (filter !== 'all' && event.action !== filter) continue
+    result.push(event)
+  }
+  return result
+}
+
+export type Risk = 'high' | 'medium' | 'low'
+
+export function riskFor(score: number): Risk {
+  if (score >= 0.75) return 'high'
+  if (score >= 0.4) return 'medium'
+  return 'low'
+}

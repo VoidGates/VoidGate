@@ -95,21 +95,17 @@ pub(crate) fn decide(
     }
 
     let mut findings = inspect(detectors, &input.content);
-    let action = action_of(&findings);
-    let mut reason_codes: Vec<&'static str> = Vec::new();
-    for finding in &findings {
-        if !reason_codes.contains(&finding.code) {
-            reason_codes.push(finding.code);
-        }
-    }
+    // Folded before truncating: the decision still counts every finding.
+    let mut verdict = Verdict::allow();
+    verdict.absorb(&findings);
 
     // Bounds the response: without it a 16 KiB message could ask for one of ~400 KiB.
     let truncated = findings.len() > MAX_FINDINGS;
     findings.truncate(MAX_FINDINGS);
 
     Ok(ChatDecisionResponse {
-        action,
-        reason_codes,
+        action: verdict.action,
+        reason_codes: verdict.reason_codes,
         findings,
         truncated,
     })

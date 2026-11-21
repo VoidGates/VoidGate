@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { allStatuses, latestThreats, recentlyBlocked, threatsPerMinute, totals } from '../dashboard/status.ts'
 import type { EventFilter } from '../dashboard/status.ts'
 import type { CategoryStatus } from '../dashboard/status.ts'
+import { isMonitored } from '../dashboard/api.ts'
 import { useEventFeed } from '../dashboard/useEventFeed.ts'
 import { useLang } from '../i18n.tsx'
 import { DashboardChart } from './DashboardChart.tsx'
@@ -29,6 +30,7 @@ export function Dashboard() {
   const copy = text.panel
   const [paused, setPaused] = useState(false)
   const { events, now, source } = useEventFeed(paused)
+  const live = source !== 'simulated'
   const [filter, setFilter] = useState<EventFilter>('all')
   // null follows the newest threat; a click pins the chosen one while it stays in the window.
   const [pinnedId, setPinnedId] = useState<string | null>(null)
@@ -43,7 +45,8 @@ export function Dashboard() {
   const detail = (status: CategoryStatus) => {
     if (status.count === 0) return copy.none
     if (status.category === 'prompt_injection' && status.peakAt !== null) return `${copy.peak} ${time.format(status.peakAt)}`
-    if (status.category === 'sensitive_data' && status.topRule !== null) {
+    // Real events do not say which personal data it was, so "most common" only exists in the simulation.
+    if (!live && status.category === 'sensitive_data' && status.topRule !== null) {
       const rule = copy.rules[status.topRule as keyof typeof copy.rules] ?? status.topRule
       return `${copy.top} ${rule}`
     }
@@ -107,23 +110,34 @@ export function Dashboard() {
         </section>
 
         <section className="status" aria-label={copy.statusLabel}>
-          {statuses.map((status) => (
-            <div key={status.category} className={`status__item status__item--${status.category} is-${status.level}`}>
-              <p className="status__kind">
-                <span className="status__swatch" aria-hidden="true" />
-                {copy.categories[status.category]}
-              </p>
-              <h2 className="status__level">{copy.levels[status.level]}</h2>
-              <p className="status__count">
-                {number.format(status.count)} {copy.inWindow}
-              </p>
-              <span className="status__detail">{detail(status)}</span>
-              <Sparkline values={status.perMinute} />
-            </div>
-          ))}
+          {statuses.map((status) =>
+            isMonitored(status.category, live) ? (
+              <div key={status.category} className={`status__item status__item--${status.category} is-${status.level}`}>
+                <p className="status__kind">
+                  <span className="status__swatch" aria-hidden="true" />
+                  {copy.categories[status.category]}
+                </p>
+                <h2 className="status__level">{copy.levels[status.level]}</h2>
+                <p className="status__count">
+                  {number.format(status.count)} {copy.inWindow}
+                </p>
+                <span className="status__detail">{detail(status)}</span>
+                <Sparkline values={status.perMinute} />
+              </div>
+            ) : (
+              <div key={status.category} className={`status__item status__item--${status.category} is-unmonitored`}>
+                <p className="status__kind">
+                  <span className="status__swatch" aria-hidden="true" />
+                  {copy.categories[status.category]}
+                </p>
+                <h2 className="status__level">{copy.unmonitored}</h2>
+                <p className="status__count">{copy.unmonitoredNote}</p>
+              </div>
+            ),
+          )}
         </section>
 
-        <DashboardChart buckets={threatsPerMinute(events, now)} />
+        <DashboardChart buckets={threatsPerMinute(events, now)} live={live} />
 
         <div className="dash__split">
           <EventList

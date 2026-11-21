@@ -25,6 +25,14 @@ const SEVERITY: [string, Category][] = [
   ['content.personal_data', 'sensitive_data'],
 ]
 
+/** Threat types the API detects today. File fraud is only in the simulation. */
+export const MONITORED_BY_API: readonly Category[] = ['prompt_injection', 'sensitive_data']
+
+/** Whether the panel has real data for this threat type in the current mode. */
+export function isMonitored(category: Category, live: boolean): boolean {
+  return !live || MONITORED_BY_API.includes(category)
+}
+
 export function categoryFor(reasonCodes: string[]): Category | null {
   for (const [code, category] of SEVERITY) {
     if (reasonCodes.includes(code)) return category
@@ -55,6 +63,7 @@ export function toPanelEvent(event: ApiEvent): PanelEvent {
     direction: event.direction,
     ruleId: event.reason_codes.join(',') || 'none',
     route: event.route,
+    reasonCodes: [...event.reason_codes],
   }
 }
 

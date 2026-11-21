@@ -70,8 +70,9 @@ recarregue a página. Não use `npm run dev -- --host`: com ele, outras máquina
 da rede poderiam usar a API com a sua chave através do proxy.
 
 Os eventos reais trazem só metadados (horário, ação, entrada ou resposta, rota
-e motivos). Por isso, nesse modo o painel não mostra trecho da mensagem, risco
-nem canal. Por enquanto os dados são
+e motivos). Por isso, nesse modo o painel mostra os motivos no lugar do trecho
+da mensagem, não mostra risco nem canal, e marca fraude por arquivo como "não
+monitorado pela API", porque a API ainda não detecta esse tipo. Por enquanto os dados são
 simulados no navegador, com aviso na tela e botão de pausar; o código fica em
 `src/dashboard/`.
 

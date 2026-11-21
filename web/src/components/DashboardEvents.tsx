@@ -8,6 +8,11 @@ const NEW_FOR = 4_000
 
 const FILTERS: EventFilter[] = ['all', 'block', 'mask']
 
+/** Reason codes in plain words; unknown future codes are shown as they come. */
+function reasonText(event: PanelEvent, labels: Record<string, string>): string {
+  return (event.reasonCodes ?? []).map((code) => labels[code] ?? code).join(', ')
+}
+
 type ListProps = {
   events: PanelEvent[]
   now: number
@@ -55,7 +60,7 @@ export function EventList({ events, now, filter, onFilter, selectedId, onSelect 
                 <span className={`event__kind event__kind--${event.category}`}>
                   {event.category && copy.categories[event.category]}
                 </span>
-                <span className="event__snippet">{event.snippet}</span>
+                <span className="event__snippet">{event.snippet ?? reasonText(event, copy.reasons)}</span>
                 <span className={`event__action event__action--${event.action}`}>{copy.actions[event.action]}</span>
               </button>
             </li>
@@ -117,11 +122,26 @@ export function EventDetail({ event }: { event: PanelEvent | null }) {
         </>
       )}
 
+      {event.route !== undefined && <p className="detail__note">{copy.detail.noText}</p>}
+
       <dl className="detail__facts">
         <dt>{copy.detail.time}</dt>
         <dd>{time.format(event.timestamp)}</dd>
-        <dt>{copy.detail.rule}</dt>
-        <dd className="detail__rule">{event.ruleId}</dd>
+        {event.route === undefined ? (
+          <>
+            <dt>{copy.detail.rule}</dt>
+            <dd className="detail__rule">{event.ruleId}</dd>
+          </>
+        ) : (
+          <>
+            <dt>{copy.detail.reasons}</dt>
+            <dd>{reasonText(event, copy.reasons)}</dd>
+            <dt>{copy.detail.direction}</dt>
+            <dd>{copy.detail.directions[event.direction]}</dd>
+            <dt>{copy.detail.route}</dt>
+            <dd>{copy.detail.routes[event.route]}</dd>
+          </>
+        )}
         {event.channel !== undefined && (
           <>
             <dt>{copy.detail.channel}</dt>

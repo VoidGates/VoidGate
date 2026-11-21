@@ -27,6 +27,8 @@ export type PanelEvent = {
   file?: { name: string; page: number }
   /** Only in real events: which API route made the decision. */
   route?: 'decisions_chat' | 'proxy_chat'
+  /** Only in real events: the reason codes the API reported. */
+  reasonCodes?: string[]
 }
 
 export const CATEGORIES: Category[] = ['prompt_injection', 'sensitive_data', 'file_fraud']

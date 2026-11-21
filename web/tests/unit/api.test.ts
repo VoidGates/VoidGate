@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { categoryFor, parseEventsResponse, toPanelEvent } from '../../src/dashboard/api.ts'
+import { categoryFor, isMonitored, parseEventsResponse, toPanelEvent } from '../../src/dashboard/api.ts'
 import type { ApiEvent } from '../../src/dashboard/api.ts'
 
 const base: ApiEvent = {
@@ -35,6 +35,7 @@ test('evento da API vira evento do painel só com metadados', () => {
     direction: 'input',
     ruleId: 'content.prompt_injection',
     route: 'proxy_chat',
+    reasonCodes: ['content.prompt_injection'],
   })
   for (const field of ['snippet', 'score', 'channel', 'file']) assert.ok(!(field in event), field)
 })
@@ -67,4 +68,11 @@ test('resposta: corpo sem a lista de eventos é recusado', () => {
   assert.throws(() => parseEventsResponse([base]))
   assert.throws(() => parseEventsResponse({ error: { code: 'unauthorized' } }))
   assert.throws(() => parseEventsResponse(null))
+})
+
+test('fraude por arquivo só aparece como monitorada na simulação', () => {
+  assert.equal(isMonitored('file_fraud', false), true)
+  assert.equal(isMonitored('file_fraud', true), false)
+  assert.equal(isMonitored('prompt_injection', true), true)
+  assert.equal(isMonitored('sensitive_data', true), true)
 })

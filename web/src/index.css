@@ -1354,6 +1354,10 @@ textarea:focus-visible {
   font-size: 14px;
 }
 
+.status__item.is-unmonitored .status__level {
+  color: var(--color-sand-muted);
+}
+
 .status__detail {
   display: inline-block;
   margin-top: 12px;
@@ -1850,6 +1854,15 @@ textarea:focus-visible {
   border-left-color: var(--color-clay);
   color: var(--color-sand-muted);
   font-family: var(--font-mono);
+  font-size: 13px;
+}
+
+.detail__note {
+  margin-top: 16px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--color-river);
+  color: var(--color-sand-muted);
   font-size: 13px;
 }
 

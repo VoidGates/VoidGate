@@ -1,3 +1,4 @@
+import { isMonitored } from '../dashboard/api.ts'
 import { CATEGORIES } from '../dashboard/events.ts'
 import type { MinuteBucket } from '../dashboard/status.ts'
 import { useLang } from '../i18n.tsx'
@@ -7,7 +8,7 @@ const HEIGHT = 150
 const BAR_GAP = 8
 
 /** Stacked bars of threats per minute, one color per threat type. */
-export function DashboardChart({ buckets }: { buckets: MinuteBucket[] }) {
+export function DashboardChart({ buckets, live }: { buckets: MinuteBucket[]; live: boolean }) {
   const { lang, text } = useLang()
   const copy = text.panel
   const time = new Intl.DateTimeFormat(lang === 'pt' ? 'pt-BR' : 'en-US', { hour: '2-digit', minute: '2-digit' })
@@ -23,7 +24,7 @@ export function DashboardChart({ buckets }: { buckets: MinuteBucket[] }) {
       <div className="chart__head">
         <h2 id="chart-title">{copy.chart.title}</h2>
         <ul className="chart__legend">
-          {CATEGORIES.map((category) => (
+          {CATEGORIES.filter((category) => isMonitored(category, live)).map((category) => (
             <li key={category} className={`chart__key chart__key--${category}`}>
               {copy.categories[category]}
             </li>

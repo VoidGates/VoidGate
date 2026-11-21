@@ -3,7 +3,8 @@
 use crate::{
     domain::detectors::{personal_data, Detector, Finding},
     error::AppError,
-    models::chat::{ChatDecisionRequest, ChatDecisionResponse},
+    events::Direction,
+    models::chat::{ChatDecisionRequest, ChatDecisionResponse, Role},
 };
 
 /// Maximum size of `content`, in UTF-8 bytes.
@@ -36,6 +37,14 @@ pub(crate) fn action_of(findings: &[Finding]) -> &'static str {
         ACTION_ALLOW
     } else {
         ACTION_MASK
+    }
+}
+
+/// What the assistant says is `output`; what the user or the system sends is `input`.
+pub(crate) fn direction_of(role: &Role) -> Direction {
+    match role {
+        Role::Assistant => Direction::Output,
+        Role::User | Role::System => Direction::Input,
     }
 }
 

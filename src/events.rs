@@ -5,15 +5,13 @@
 //! score, so nothing sensitive can be stored by mistake. The log is local to
 //! the process and is lost on restart.
 
-// Nothing calls this module until the routes record events (next steps).
-// TODO(decision-events): remove this attribute when the first route records.
-#![allow(dead_code)]
-
 use std::{
     collections::VecDeque,
     sync::Mutex,
     time::{SystemTime, UNIX_EPOCH},
 };
+#[cfg(test)]
+use std::{sync::Arc, thread};
 
 use serde::Serialize;
 
@@ -29,6 +27,10 @@ pub(crate) const WINDOW_MS: u64 = 30 * 60 * 1_000;
 #[serde(rename_all = "snake_case")]
 pub(crate) enum Route {
     DecisionsChat,
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "recorded by /v1/proxy/chat in step 3")
+    )]
     ProxyChat,
 }
 
@@ -89,9 +91,24 @@ impl EventLog {
     }
 
     /// At most `limit` events of the window, oldest first.
+    #[cfg_attr(
+        not(test),
+        expect(dead_code, reason = "read by GET /v1/events in step 4")
+    )]
     pub(crate) fn recent(&self, limit: usize) -> Result<Vec<Event>, AppError> {
         let inner = self.inner.lock().map_err(|_| AppError::Unavailable)?;
         Ok(recent_locked(&inner, now_ms()?, limit))
+    }
+
+    /// Poisons the lock the way a panic in another thread would.
+    #[cfg(test)]
+    pub(crate) fn poison_for_test(self: &Arc<Self>) {
+        let this = Arc::clone(self);
+        let _ = thread::spawn(move || {
+            let _guard = this.inner.lock().expect("lock");
+            panic!("poison the event log");
+        })
+        .join();
     }
 
     #[cfg(test)]
@@ -147,6 +164,10 @@ fn push_locked(
     }
 }
 
+#[cfg_attr(
+    not(test),
+    expect(dead_code, reason = "reached only through `recent` until step 4")
+)]
 fn recent_locked(inner: &Inner, now: u64, limit: usize) -> Vec<Event> {
     // Expired events can still sit in memory when no one has written for a
     // while, so reading filters by the window too.
@@ -172,7 +193,7 @@ fn now_ms() -> Result<u64, AppError> {
 
 #[cfg(test)]
 mod tests {
-    use std::{sync::Arc, thread};
+    use std::sync::Arc;
 
     use serde_json::json;
 
@@ -310,12 +331,7 @@ mod tests {
     #[test]
     fn poisoned_lock_is_unavailable_for_writes_and_reads() {
         let log = Arc::new(EventLog::new());
-        let poisoned = Arc::clone(&log);
-        let _ = thread::spawn(move || {
-            let _guard = poisoned.inner.lock().expect("lock");
-            panic!("poison the event log");
-        })
-        .join();
+        log.poison_for_test();
 
         assert_eq!(
             log.record(Route::DecisionsChat, Direction::Input, "allow", vec![]),

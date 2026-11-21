@@ -418,6 +418,7 @@ mod tests {
         let (status, body) = send(router.clone(), "GET", "/metrics", true).await;
         assert_eq!(status, StatusCode::OK);
         assert!(body.contains("voidgate_authenticated_decisions_total"));
+        assert!(body.contains("voidgate_event_record_errors_total 0"));
         assert!(
             !body.contains("a".repeat(32).as_str()),
             "metrics leak the key"

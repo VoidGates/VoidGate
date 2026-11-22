@@ -45,18 +45,16 @@ test('liberado sem motivo fica sem categoria', () => {
   assert.deepEqual([event.category, event.ruleId], [null, 'none'])
 })
 
-test('resposta: lê a lista e pula eventos malformados', () => {
-  const events = parseEventsResponse({
-    events: [
-      base,
-      { ...base, id: 8, action: 'delete' },
-      { ...base, id: 9, reason_codes: [1] },
-      { ...base, id: 10, timestamp_ms: 'ontem' },
-      null,
-      { ...base, id: 11, direction: 'output', action: 'mask', reason_codes: ['content.personal_data'] },
-    ],
-  })
-  assert.deepEqual(events.map((e) => e.id), ['api_7', 'api_11'])
+test('resposta: recusa a página inteira quando há um evento malformado', () => {
+  for (const invalid of [
+    { ...base, id: 8, action: 'delete' },
+    { ...base, id: 9, reason_codes: [1] },
+    { ...base, id: 10, timestamp_ms: 'ontem' },
+    { ...base, id: 0 },
+    null,
+  ]) {
+    assert.throws(() => parseEventsResponse({ events: [base, invalid] }))
+  }
 })
 
 test('resposta: campos extras são ignorados e nunca chegam à tela', () => {

@@ -44,8 +44,8 @@ function isApiEvent(value: unknown): value is ApiEvent {
   if (typeof value !== 'object' || value === null) return false
   const e = value as Record<string, unknown>
   return (
-    Number.isInteger(e.id) &&
-    Number.isFinite(e.timestamp_ms) &&
+    typeof e.id === 'number' && Number.isSafeInteger(e.id) && e.id > 0 &&
+    typeof e.timestamp_ms === 'number' && Number.isSafeInteger(e.timestamp_ms) && e.timestamp_ms >= 0 &&
     ROUTES.has(e.route as string) &&
     DIRECTIONS.has(e.direction as string) &&
     ACTIONS.has(e.action as string) &&
@@ -68,14 +68,16 @@ export function toPanelEvent(event: ApiEvent): PanelEvent {
 }
 
 /**
- * Reads the body of `GET /v1/events`. Malformed events are skipped instead of
- * breaking the whole panel; a body without an `events` list is rejected.
+ * Reads the body of `GET /v1/events`. Invalid data is an API failure, not an
+ * empty result: silently dropping events would underreport real decisions.
  */
 export function parseEventsResponse(body: unknown): PanelEvent[] {
   if (typeof body !== 'object' || body === null || !Array.isArray((body as { events?: unknown }).events)) {
     throw new Error('Unexpected response from /v1/events')
   }
-  return (body as { events: unknown[] }).events.filter(isApiEvent).map(toPanelEvent)
+  const events = (body as { events: unknown[] }).events
+  if (!events.every(isApiEvent)) throw new Error('Invalid event in /v1/events response')
+  return events.map(toPanelEvent)
 }
 
 /** The dev server proxies `/api` to the API and adds the key there. */

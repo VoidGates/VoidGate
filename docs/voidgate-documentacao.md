@@ -114,7 +114,7 @@ Isto está no código do backend 0.1.0:
 ### Já funciona, além da lista acima
 
 - Detecção de manipulação de prompt em português, inglês, espanhol, francês, alemão e chinês, mais alguns marcadores de modelo.
-- Dados pessoais com ação `mask`: e-mail, telefone E.164, cartão (Luhn), IBAN, CPF, CNPJ e SSN. A resposta da decisão traz offsets. O proxy substitui o trecho por `[redacted]`.
+- Dados pessoais com ação `mask`: e-mail, telefone E.164 ou brasileiro, cartão (Luhn), IBAN, CPF, CNPJ e SSN. A resposta da decisão traz offsets. O proxy substitui o trecho por `[redacted]`.
 - `POST /v1/proxy/chat`, quando `VOIDGATE_UPSTREAM_URL` está definido. Sem a variável a rota responde 503.
 
 ### Próximo

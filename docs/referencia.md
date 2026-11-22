@@ -221,7 +221,7 @@ Códigos de motivo (`reason_codes`) nesta versão:
 | --- | --- | --- |
 | `content.invisible_unicode` | `invisible_unicode` | O texto contém um caractere que a pessoa não vê, mas o modelo lê. Qualquer ocorrência fora das exceções abaixo gera `block`. |
 | `content.prompt_injection` | `prompt_injection` | Frase de manipulação de instrução, em várias línguas, ou um token de controle de modelo. Gera `block`. |
-| `content.personal_data` | `personal_data` | E-mail, telefone E.164, cartão, IBAN, CPF, CNPJ ou SSN. Sozinho, gera `mask`. |
+| `content.personal_data` | `personal_data` | E-mail, telefone (E.164 ou brasileiro, como `(11) 98765-4321`), cartão, IBAN, CPF, CNPJ ou SSN. Sozinho, gera `mask`. |
 
 Caracteres tratados como ocultos:
 
@@ -293,4 +293,4 @@ Esta API só decide. As garantias abaixo dependem do gateway que a chama:
 
 ## Limites desta etapa
 
-Este serviço não é um firewall de rede nem substitui autenticação da aplicação ou WAF. Não há ainda rate limit distribuído, identidade por tenant, réplicas, isolamento da isca nem TLS dentro do processo. A decisão de chat detecta caracteres ocultos, manipulação de prompt e dados pessoais (e-mail, telefone E.164, cartão, IBAN, CPF, CNPJ e SSN). `POST /v1/proxy/chat` encaminha ao `VOIDGATE_UPSTREAM_URL` depois de bloquear ou mascarar; sem essa variável a rota responde 503. Não há painel, várias empresas na mesma instalação nem ambiente-isca. Mantenha o bind local ou coloque a API atrás de um gateway confiável com TLS e controles de acesso. A decisão `allow` ou `decoy` só tem efeito quando esse gateway a aplica.
+Este serviço não é um firewall de rede nem substitui autenticação da aplicação ou WAF. Não há ainda rate limit distribuído, identidade por tenant, réplicas, isolamento da isca nem TLS dentro do processo. A decisão de chat detecta caracteres ocultos, manipulação de prompt e dados pessoais (e-mail, telefone E.164 ou brasileiro, cartão, IBAN, CPF, CNPJ e SSN). `POST /v1/proxy/chat` encaminha ao `VOIDGATE_UPSTREAM_URL` depois de bloquear ou mascarar; sem essa variável a rota responde 503. Não há painel, várias empresas na mesma instalação nem ambiente-isca. Mantenha o bind local ou coloque a API atrás de um gateway confiável com TLS e controles de acesso. A decisão `allow` ou `decoy` só tem efeito quando esse gateway a aplica.

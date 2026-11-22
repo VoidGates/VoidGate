@@ -130,9 +130,11 @@ Todas as rotas, exceto as de saúde, exigem o cabeçalho `x-voidgate-key`. O con
 | --- | --- | --- |
 | `content.prompt_injection` | `block` | Frases de manipulação em português, inglês, espanhol, francês, alemão e chinês, e tokens de controle de modelo |
 | `content.invisible_unicode` | `block` | Caracteres invisíveis, controles bidirecionais (Trojan Source) e tags Unicode |
-| `content.personal_data` | `mask` | E-mail, telefone E.164, cartão (Luhn), IBAN, CPF, CNPJ e SSN |
+| `content.personal_data` | `mask` | E-mail, telefone (E.164 e brasileiro), cartão (Luhn), IBAN, CPF, CNPJ e SSN |
 
 `block` prevalece sobre `mask`. Os achados trazem só a posição do trecho, nunca o texto, então podem ir para log.
+
+Antes da comparação, o texto é normalizado: caracteres fullwidth, letras matemáticas, homóglifos cirílicos e gregos, leetspeak (`1gn0r3`) e letras soletradas (`i.g.n.o.r.e`) voltam à forma simples. Disfarce visual não fura a lista.
 
 ## Limites
 

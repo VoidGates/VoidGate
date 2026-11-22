@@ -201,7 +201,12 @@ mod tests {
         for _ in 0..total {
             state
                 .events
-                .record(Route::DecisionsChat, Direction::Input, Action::Allow, vec![])
+                .record(
+                    Route::DecisionsChat,
+                    Direction::Input,
+                    Action::Allow,
+                    vec![],
+                )
                 .expect("record");
         }
 

@@ -335,9 +335,21 @@ mod tests {
         assert_eq!(
             seen,
             vec![
-                (Direction::Input, Action::Mask, vec!["content.personal_data"]),
-                (Direction::Input, Action::Mask, vec!["content.personal_data"]),
-                (Direction::Output, Action::Mask, vec!["content.personal_data"]),
+                (
+                    Direction::Input,
+                    Action::Mask,
+                    vec!["content.personal_data"]
+                ),
+                (
+                    Direction::Input,
+                    Action::Mask,
+                    vec!["content.personal_data"]
+                ),
+                (
+                    Direction::Output,
+                    Action::Mask,
+                    vec!["content.personal_data"]
+                ),
             ]
         );
         assert!(events

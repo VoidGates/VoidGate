@@ -6,7 +6,10 @@
 use serde_json::{json, Value};
 
 use crate::{
-    domain::{action::Action, detectors::{personal_data, Detector}},
+    domain::{
+        action::Action,
+        detectors::{personal_data, Detector},
+    },
     error::AppError,
     services::chat::{action_of, inspect, Verdict, MAX_CONTENT_BYTES},
 };

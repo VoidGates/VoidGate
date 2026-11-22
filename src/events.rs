@@ -6,8 +6,8 @@
 //! the process and is lost on restart.
 
 use std::{
-    collections::VecDeque,
-    hash::{BuildHasher, RandomState},
+    collections::{hash_map::RandomState, VecDeque},
+    hash::BuildHasher,
     sync::Mutex,
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -147,7 +147,11 @@ impl EventLog {
             events.pop();
         }
         let last_id = events.last().map_or_else(
-            || after_id.map_or(inner.next_id.saturating_sub(1), |id| id.max(inner.next_id.saturating_sub(1))),
+            || {
+                after_id.map_or(inner.next_id.saturating_sub(1), |id| {
+                    id.max(inner.next_id.saturating_sub(1))
+                })
+            },
             |event| event.id,
         );
         Ok(EventPage {
@@ -262,7 +266,9 @@ mod tests {
 
     use serde_json::json;
 
-    use super::{Direction, Event, EventLog, Route, MAX_EVENTS, MAX_EVENTS_PER_RESPONSE, WINDOW_MS};
+    use super::{
+        Direction, Event, EventLog, Route, MAX_EVENTS, MAX_EVENTS_PER_RESPONSE, WINDOW_MS,
+    };
     use crate::error::AppError;
 
     use super::Action;
@@ -367,8 +373,13 @@ mod tests {
     fn cursor_reads_the_next_page_without_repeating_events() {
         let log = EventLog::new();
         for _ in 0..MAX_EVENTS_PER_RESPONSE + 2 {
-            log.record(Route::DecisionsChat, Direction::Input, Action::Allow, vec![])
-                .expect("record");
+            log.record(
+                Route::DecisionsChat,
+                Direction::Input,
+                Action::Allow,
+                vec![],
+            )
+            .expect("record");
         }
         let cursor = format!("{:016x}:0", log.stream_id);
         let first = log.page(Some(&cursor)).expect("first page");
@@ -383,8 +394,13 @@ mod tests {
     #[test]
     fn cursor_from_another_run_resets_and_bad_cursor_is_rejected() {
         let log = EventLog::new();
-        log.record(Route::DecisionsChat, Direction::Input, Action::Allow, vec![])
-            .expect("record");
+        log.record(
+            Route::DecisionsChat,
+            Direction::Input,
+            Action::Allow,
+            vec![],
+        )
+        .expect("record");
         let other = EventLog::new();
         let cursor = other.page(None).expect("cursor").next_cursor;
         assert!(log.page(Some(&cursor)).expect("reset").reset);
@@ -435,7 +451,12 @@ mod tests {
         log.poison_for_test();
 
         assert_eq!(
-            log.record(Route::DecisionsChat, Direction::Input, Action::Allow, vec![]),
+            log.record(
+                Route::DecisionsChat,
+                Direction::Input,
+                Action::Allow,
+                vec![]
+            ),
             Err(AppError::Unavailable)
         );
         assert_eq!(log.recent(10), Err(AppError::Unavailable));

@@ -1,7 +1,10 @@
 //! Chat decision. `block` wins over `mask`. Personal data alone is `mask`.
 
 use crate::{
-    domain::{action::Action, detectors::{personal_data, Detector, Finding}},
+    domain::{
+        action::Action,
+        detectors::{personal_data, Detector, Finding},
+    },
     error::AppError,
     events::Direction,
     models::chat::{ChatDecisionRequest, ChatDecisionResponse, Role},

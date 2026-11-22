@@ -1207,6 +1207,16 @@ textarea:focus-visible {
   font-weight: 600;
 }
 
+.dash__demo--api {
+  background: rgb(127 196 164 / 14%);
+  color: var(--color-allowed);
+}
+
+.dash__demo--stale {
+  background: rgb(240 89 78 / 14%);
+  color: var(--color-blocked);
+}
+
 .dash__button {
   padding: 8px 16px;
   border: 1px solid var(--color-clay);
@@ -1342,6 +1352,10 @@ textarea:focus-visible {
 .status__count {
   color: var(--color-sand-muted);
   font-size: 14px;
+}
+
+.status__item.is-unmonitored .status__level {
+  color: var(--color-sand-muted);
 }
 
 .status__detail {
@@ -1840,6 +1854,15 @@ textarea:focus-visible {
   border-left-color: var(--color-clay);
   color: var(--color-sand-muted);
   font-family: var(--font-mono);
+  font-size: 13px;
+}
+
+.detail__note {
+  margin-top: 16px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  background: var(--color-river);
+  color: var(--color-sand-muted);
   font-size: 13px;
 }
 

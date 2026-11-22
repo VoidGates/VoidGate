@@ -8,6 +8,11 @@ const NEW_FOR = 4_000
 
 const FILTERS: EventFilter[] = ['all', 'block', 'mask']
 
+/** Reason codes in plain words; unknown future codes are shown as they come. */
+function reasonText(event: PanelEvent, labels: Record<string, string>): string {
+  return (event.reasonCodes ?? []).map((code) => labels[code] ?? code).join(', ')
+}
+
 type ListProps = {
   events: PanelEvent[]
   now: number
@@ -55,7 +60,7 @@ export function EventList({ events, now, filter, onFilter, selectedId, onSelect 
                 <span className={`event__kind event__kind--${event.category}`}>
                   {event.category && copy.categories[event.category]}
                 </span>
-                <span className="event__snippet">{event.snippet}</span>
+                <span className="event__snippet">{event.snippet ?? reasonText(event, copy.reasons)}</span>
                 <span className={`event__action event__action--${event.action}`}>{copy.actions[event.action]}</span>
               </button>
             </li>
@@ -73,7 +78,8 @@ export function EventDetail({ event }: { event: PanelEvent | null }) {
     return <aside className="detail detail--empty">{copy.events.empty}</aside>
   }
   const info = copy.detail[event.category]
-  const risk = riskFor(event.score)
+  // Real events carry no text, score or channel: those parts only show when present.
+  const risk = event.score === undefined ? null : riskFor(event.score)
   const time = new Intl.DateTimeFormat(lang === 'pt' ? 'pt-BR' : 'en-US', {
     day: '2-digit',
     month: '2-digit',
@@ -100,32 +106,59 @@ export function EventDetail({ event }: { event: PanelEvent | null }) {
         </>
       )}
 
-      <p className="detail__label">
-        {event.file ? copy.detail.hidden : isOutput ? copy.detail.answer : copy.detail.message}
-      </p>
-      <p className={`detail__box detail__box--${event.category}`}>{event.snippet}</p>
+      {event.snippet !== undefined && (
+        <>
+          <p className="detail__label">
+            {event.file ? copy.detail.hidden : isOutput ? copy.detail.answer : copy.detail.message}
+          </p>
+          <p className={`detail__box detail__box--${event.category}`}>{event.snippet}</p>
+        </>
+      )}
 
-      {!isOutput && (
+      {!isOutput && received !== undefined && (
         <>
           <p className="detail__label">{copy.detail.received}</p>
           <p className="detail__box detail__box--muted">{received}</p>
         </>
       )}
 
+      {event.route !== undefined && <p className="detail__note">{copy.detail.noText}</p>}
+
       <dl className="detail__facts">
         <dt>{copy.detail.time}</dt>
         <dd>{time.format(event.timestamp)}</dd>
-        <dt>{copy.detail.rule}</dt>
-        <dd className="detail__rule">{event.ruleId}</dd>
-        <dt>{copy.detail.channel}</dt>
-        <dd>{event.channel}</dd>
-        <dt>{copy.detail.risk}</dt>
-        <dd>
-          {copy.detail.risks[risk]} ({number.format(event.score)})
-          <span className={`detail__risk detail__risk--${risk}`} aria-hidden="true">
-            <i style={{ width: `${Math.round(event.score * 100)}%` }} />
-          </span>
-        </dd>
+        {event.route === undefined ? (
+          <>
+            <dt>{copy.detail.rule}</dt>
+            <dd className="detail__rule">{event.ruleId}</dd>
+          </>
+        ) : (
+          <>
+            <dt>{copy.detail.reasons}</dt>
+            <dd>{reasonText(event, copy.reasons)}</dd>
+            <dt>{copy.detail.direction}</dt>
+            <dd>{copy.detail.directions[event.direction]}</dd>
+            <dt>{copy.detail.route}</dt>
+            <dd>{copy.detail.routes[event.route]}</dd>
+          </>
+        )}
+        {event.channel !== undefined && (
+          <>
+            <dt>{copy.detail.channel}</dt>
+            <dd>{event.channel}</dd>
+          </>
+        )}
+        {risk !== null && event.score !== undefined && (
+          <>
+            <dt>{copy.detail.risk}</dt>
+            <dd>
+              {copy.detail.risks[risk]} ({number.format(event.score)})
+              <span className={`detail__risk detail__risk--${risk}`} aria-hidden="true">
+                <i style={{ width: `${Math.round(event.score * 100)}%` }} />
+              </span>
+            </dd>
+          </>
+        )}
       </dl>
     </aside>
   )

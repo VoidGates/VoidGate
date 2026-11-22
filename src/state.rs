@@ -1,4 +1,6 @@
-//! Read-only configuration shared by every request. Built once at startup.
+//! State shared by every request, built once at startup. The configuration is
+//! read-only; the rate limiter, the metrics and the event log are the only
+//! parts that change while the process runs, each behind its own lock or atomics.
 
 use std::{sync::Arc, time::Duration};
 
@@ -10,6 +12,7 @@ use crate::{
         detectors::{default_detectors, Detector},
         policy::ExactPathPolicy,
     },
+    events::EventLog,
     metrics::Metrics,
     rate_limit::{RateLimitConfig, RateLimiter},
 };
@@ -25,6 +28,7 @@ pub struct AppState {
     pub(crate) rate_limiter: Arc<RateLimiter>,
     pub(crate) decision_slots: Arc<Semaphore>,
     pub(crate) metrics: Arc<Metrics>,
+    pub(crate) events: Arc<EventLog>,
     pub(crate) upstream_url: Option<String>,
     pub(crate) http: reqwest::Client,
 }
@@ -46,6 +50,7 @@ impl AppState {
             rate_limiter: Arc::new(RateLimiter::new(rate_limit)),
             decision_slots: Arc::new(Semaphore::new(MAX_CONCURRENT_DECISIONS)),
             metrics: Arc::new(Metrics::default()),
+            events: Arc::new(EventLog::new()),
             upstream_url: None,
             http: reqwest::Client::builder()
                 .timeout(Duration::from_secs(30))

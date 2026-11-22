@@ -103,6 +103,85 @@
         }
       }
     },
+    "/v1/events": {
+      "get": {
+        "tags": [
+          "Operação"
+        ],
+        "summary": "Decisões recentes, só metadados",
+        "description": "Os eventos dos últimos 30 minutos, no máximo 1000 por página, do mais antigo para o mais novo. Envie `next_cursor` na próxima chamada para receber apenas eventos posteriores. `gap` indica perda de eventos; `reset` indica reinício ou outra réplica. Cada evento traz a rota, o sentido, a ação e os códigos de motivo, sem texto da mensagem. Os eventos ficam na memória do processo. Não consome o limite de decisões.",
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco retornado como `next_cursor` pela leitura anterior.",
+            "schema": { "type": "string" }
+          }
+        ],
+        "security": [
+          {
+            "ApiKey": []
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Os eventos da janela. A lista vem vazia quando não houve decisões.",
+            "headers": {
+              "Cache-Control": {
+                "description": "Sempre `no-store`: nenhuma cópia dos eventos deve ser guardada.",
+                "schema": {
+                  "type": "string",
+                  "enum": [
+                    "no-store"
+                  ]
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/EventsResponse"
+                },
+                "example": {
+                  "events": [
+                    {
+                      "id": 41,
+                      "timestamp_ms": 1763700000000,
+                      "route": "proxy_chat",
+                      "direction": "input",
+                      "action": "mask",
+                      "reason_codes": [
+                        "content.personal_data"
+                      ]
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "$ref": "#/components/responses/Unauthorized"
+          },
+          "503": {
+            "description": "O registro de eventos em memória está indisponível.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": {
+                    "code": "unavailable",
+                    "message": "Service is temporarily unavailable."
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/v1/decisions/http": {
       "post": {
         "tags": [
@@ -475,6 +554,87 @@
           "truncated": {
             "type": "boolean",
             "description": "`true` quando havia mais de 100 ocorrências; a decisão considera todas."
+          }
+        }
+      },
+      "EventsResponse": {
+        "type": "object",
+        "description": "Um objeto, e não uma lista solta, para que novos campos possam entrar depois sem quebrar quem já lê `events`.",
+        "required": [
+          "events",
+          "next_cursor",
+          "has_more",
+          "gap",
+          "reset"
+        ],
+        "properties": {
+          "events": {
+            "type": "array",
+            "maxItems": 1000,
+            "items": {
+              "$ref": "#/components/schemas/Event"
+            }
+          },
+          "next_cursor": { "type": "string", "description": "Envie como `cursor` na próxima leitura." },
+          "has_more": { "type": "boolean", "description": "Há mais eventos disponíveis imediatamente após esta página." },
+          "gap": { "type": "boolean", "description": "Parte do histórico não está mais disponível nesta instância." },
+          "reset": { "type": "boolean", "description": "O cursor era de outra instância ou de uma execução anterior." }
+        }
+      },
+      "Event": {
+        "type": "object",
+        "description": "Uma decisão, só em metadados. Não existe campo para texto, trecho, posição, pontuação, regra, canal ou categoria.",
+        "required": [
+          "id",
+          "timestamp_ms",
+          "route",
+          "direction",
+          "action",
+          "reason_codes"
+        ],
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Sequencial desde a partida do processo."
+          },
+          "timestamp_ms": {
+            "type": "integer",
+            "description": "Milissegundos desde 1970-01-01 UTC."
+          },
+          "route": {
+            "type": "string",
+            "enum": [
+              "decisions_chat",
+              "proxy_chat"
+            ]
+          },
+          "direction": {
+            "type": "string",
+            "enum": [
+              "input",
+              "output"
+            ],
+            "description": "`output` é o que o assistente diz; `input` é o que o usuário ou o sistema envia."
+          },
+          "action": {
+            "type": "string",
+            "enum": [
+              "allow",
+              "mask",
+              "block"
+            ]
+          },
+          "reason_codes": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "enum": [
+                "content.invisible_unicode",
+                "content.prompt_injection",
+                "content.personal_data"
+              ]
+            }
           }
         }
       },

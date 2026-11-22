@@ -124,7 +124,7 @@ requisição → auth → handlers → services → domain
 | --- | --- | --- | --- |
 | Apresentação | `handlers/` | Recebe a requisição HTTP, chama o service e devolve JSON. | Não contém regra de negócio. |
 | Aplicação | `services/` | Valida a entrada, consulta o domínio e monta a resposta. | Não conhece HTTP nem axum. |
-| Domínio | `domain/` | Decide: caminho de isca e detectores de conteúdo. | Não conhece JSON, rotas nem configuração. |
+| Domínio | `domain/` + `crates/voidgate-core` | Decide: caminho de isca (`domain/policy.rs`) e conteúdo (detectores no core). | Não conhece JSON, rotas nem configuração. |
 
 Três partes são usadas por todas as camadas:
 
@@ -137,18 +137,31 @@ Em um sistema comum, a última camada seria a de dados (banco). Este serviço n�
 Na prática, isso define onde cada mudança entra:
 
 - Rota nova: um handler em `handlers/`, um service em `services/`, os corpos em `models/` e a rota em `lib.rs`.
-- Regra de decisão nova, como um detector: só em `domain/`.
+- Regra de decisão nova, como um detector: só em `crates/voidgate-core`. Vale pro servidor e pro pacote Python.
 - Erro novo: uma variante em `AppError`.
 
 Cada pasta do repositório tem um `README.md` com o que ela é e o que cuida.
 
 ```text
-src/       API
-web/       site
-tests/     suíte da API pública e da demonstração
-docs/      documentação do produto
-.github/   integração contínua
+src/                    API (servidor HTTP)
+crates/voidgate-core/   motor de decisão: biblioteca Rust pura, sem IO
+bindings/python/        pacote Python `voidgate` sobre o core
+web/                    site
+tests/                  suíte da API pública e da demonstração
+docs/                   documentação do produto
+.github/                integração contínua
 ```
+
+### Biblioteca e servidor
+
+O motor (detectores, `Action`, `inspect`, `redact`, `Verdict`) fica no crate `voidgate-core`. Ele não tem IO nem thread e, sem a feature `serde`, não tem dependência nenhuma.
+
+```text
+voidgate-core ──┬── voidgate (servidor HTTP, src/)   usa com a feature serde
+                └── voidgate-py (bindings/python)     pip install voidgate
+```
+
+O servidor reexporta o core em `src/domain/mod.rs`, então o código dele continua usando `crate::domain::...`. Um detector novo no core passa a valer nos dois lugares sem mudar o servidor.
 
 ### Estrutura de pastas
 
@@ -167,8 +180,7 @@ src/
 ├── services/      regras de negócio: valida a entrada e monta a resposta
 ├── models/        corpos de requisição e resposta (DTOs)
 ├── domain/        regras puras de decisão, sem HTTP
-│   ├── policy.rs      caminhos de isca
-│   └── detectors/     detectores de conteúdo
+│   └── policy.rs      caminhos de isca (os detectores vêm de voidgate-core)
 └── docs/          página do Swagger UI e openapi.json
 ```
 
@@ -209,7 +221,7 @@ Códigos de motivo (`reason_codes`) nesta versão:
 | --- | --- | --- |
 | `content.invisible_unicode` | `invisible_unicode` | O texto contém um caractere que a pessoa não vê, mas o modelo lê. Qualquer ocorrência fora das exceções abaixo gera `block`. |
 | `content.prompt_injection` | `prompt_injection` | Frase de manipulação de instrução, em várias línguas, ou um token de controle de modelo. Gera `block`. |
-| `content.personal_data` | `personal_data` | E-mail, telefone E.164, cartão, IBAN, CPF, CNPJ ou SSN. Sozinho, gera `mask`. |
+| `content.personal_data` | `personal_data` | E-mail, telefone (E.164 ou brasileiro, como `(11) 98765-4321`), cartão, IBAN, CPF, CNPJ ou SSN. Sozinho, gera `mask`. |
 
 Caracteres tratados como ocultos:
 
@@ -232,7 +244,7 @@ Exceções, porque fazem parte da escrita normal. Todas exigem vizinhos visívei
 | U+200E e U+200F (marcas de direção) | estão ao lado de texto hebraico ou árabe |
 | U+FEFF (BOM) | é o primeiro caractere do texto |
 
-Os seletores de variação U+FE00–U+FE0F não são bloqueados: U+FE0F faz parte de emoji comuns. Emoji e escritas são reconhecidos por faixas de código, não pelas tabelas completas do Unicode; se um texto legítimo for bloqueado, a faixa correspondente precisa entrar em `src/domain/detectors/invisible_unicode.rs`.
+Os seletores de variação U+FE00–U+FE0F não são bloqueados: U+FE0F faz parte de emoji comuns. Emoji e escritas são reconhecidos por faixas de código, não pelas tabelas completas do Unicode; se um texto legítimo for bloqueado, a faixa correspondente precisa entrar em `crates/voidgate-core/src/detectors/invisible_unicode.rs`.
 
 Respostas de erro, no formato da seção [Erros](#erros): `401` sem chave válida (antes de ler o corpo), `400` para JSON inválido, `role` desconhecida, campo extra ou faltante, `413` para `content` acima de 16 KiB ou corpo acima de 100 KiB, `415` sem `Content-Type: application/json`.
 
@@ -252,7 +264,7 @@ Invoke-RestMethod -Uri 'http://127.0.0.1:8080/v1/decisions/chat' -Method Post -H
 
 Resposta: `{"action":"block","reason_codes":["content.invisible_unicode"],"findings":[{"code":"content.invisible_unicode","detector":"invisible_unicode","start":5,"end":8}],"truncated":false}` (`Olá ` ocupa 5 bytes e o U+202E ocupa 3).
 
-Os detectores ficam em `src/domain/detectors/`, cada um implementando o trait `Detector`; novos detectores entram na lista `default_detectors()` sem alterar o handler nem o service.
+Os detectores ficam em `crates/voidgate-core/src/detectors/`, cada um implementando o trait `Detector`; novos detectores entram na lista `default_detectors()` sem alterar o handler nem o service.
 
 ## Versão
 
@@ -281,4 +293,4 @@ Esta API só decide. As garantias abaixo dependem do gateway que a chama:
 
 ## Limites desta etapa
 
-Este serviço não é um firewall de rede nem substitui autenticação da aplicação ou WAF. Não há ainda rate limit distribuído, identidade por tenant, réplicas, isolamento da isca nem TLS dentro do processo. A decisão de chat detecta caracteres ocultos, manipulação de prompt e dados pessoais (e-mail, telefone E.164, cartão, IBAN, CPF, CNPJ e SSN). `POST /v1/proxy/chat` encaminha ao `VOIDGATE_UPSTREAM_URL` depois de bloquear ou mascarar; sem essa variável a rota responde 503. Não há painel, várias empresas na mesma instalação nem ambiente-isca. Mantenha o bind local ou coloque a API atrás de um gateway confiável com TLS e controles de acesso. A decisão `allow` ou `decoy` só tem efeito quando esse gateway a aplica.
+Este serviço não é um firewall de rede nem substitui autenticação da aplicação ou WAF. Não há ainda rate limit distribuído, identidade por tenant, réplicas, isolamento da isca nem TLS dentro do processo. A decisão de chat detecta caracteres ocultos, manipulação de prompt e dados pessoais (e-mail, telefone E.164 ou brasileiro, cartão, IBAN, CPF, CNPJ e SSN). `POST /v1/proxy/chat` encaminha ao `VOIDGATE_UPSTREAM_URL` depois de bloquear ou mascarar; sem essa variável a rota responde 503. Não há painel, várias empresas na mesma instalação nem ambiente-isca. Mantenha o bind local ou coloque a API atrás de um gateway confiável com TLS e controles de acesso. A decisão `allow` ou `decoy` só tem efeito quando esse gateway a aplica.

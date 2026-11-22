@@ -1,6 +1,7 @@
 //! Request and response bodies (DTOs). No logic.
 
 pub(crate) mod chat;
+pub(crate) mod events;
 pub(crate) mod http;
 
 use serde::Serialize;

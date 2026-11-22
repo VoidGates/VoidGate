@@ -5,12 +5,12 @@
 
 use super::{Detector, Finding};
 
-pub(crate) const REASON_CODE: &str = "content.personal_data";
+pub const REASON_CODE: &str = "content.personal_data";
 
 const DETECTOR_NAME: &str = "personal_data";
 const REDACTED: &str = "[redacted]";
 
-pub(crate) struct PersonalData;
+pub struct PersonalData;
 
 impl Detector for PersonalData {
     fn scan(&self, content: &str) -> Vec<Finding> {
@@ -22,6 +22,7 @@ impl Detector for PersonalData {
                 .or_else(|| try_iban(bytes, index))
                 .or_else(|| try_email(bytes, index))
                 .or_else(|| try_ssn(bytes, index))
+                .or_else(|| try_br_phone(bytes, index))
                 .or_else(|| try_id_or_card(bytes, index));
             if let Some(end) = end {
                 findings.push(Finding {
@@ -40,7 +41,7 @@ impl Detector for PersonalData {
 }
 
 /// Replaces personal-data spans with `[redacted]`. Other findings are ignored.
-pub(crate) fn redact(content: &str, findings: &[Finding]) -> String {
+pub fn redact(content: &str, findings: &[Finding]) -> String {
     let mut spans: Vec<(usize, usize)> = findings
         .iter()
         .filter(|finding| finding.code == REASON_CODE)
@@ -206,6 +207,60 @@ fn try_iban(bytes: &[u8], start: usize) -> Option<usize> {
         return None;
     }
     Some(index)
+}
+
+/// Brazilian phone as people type it: `(11) 98765-4321`, `(11)3456-7890`,
+/// `11 98765-4321`, `98765-4321`. Needs the parentheses or the hyphen, so a
+/// bare run of digits (order id, CPF) is left to the other checks.
+fn try_br_phone(bytes: &[u8], start: usize) -> Option<usize> {
+    if start > 0 && bytes[start - 1].is_ascii_digit() {
+        return None;
+    }
+    let ddd = |at: usize| {
+        let pair = bytes.get(at..at + 2)?;
+        (pair.iter().all(|b| (b'1'..=b'9').contains(b))).then_some(at + 2)
+    };
+    let mut index = start;
+    let mut parenthesized = false;
+    if bytes[index] == b'(' {
+        index = ddd(index + 1)?;
+        if bytes.get(index) != Some(&b')') {
+            return None;
+        }
+        index += 1;
+        if bytes.get(index) == Some(&b' ') {
+            index += 1;
+        }
+        parenthesized = true;
+    } else if let Some(after) = ddd(index).filter(|&at| bytes.get(at) == Some(&b' ')) {
+        index = after + 1;
+    }
+    // Mobile: 9 + 4 digits; landline: 4 digits starting with 2-5.
+    let head = match bytes.get(index) {
+        Some(b'9') => 5,
+        Some(b'2'..=b'5') => 4,
+        _ => return None,
+    };
+    let head_end = index + head;
+    if !bytes.get(index..head_end)?.iter().all(u8::is_ascii_digit) {
+        return None;
+    }
+    index = head_end;
+    let hyphen = bytes.get(index) == Some(&b'-');
+    if hyphen || (parenthesized && bytes.get(index) == Some(&b' ')) {
+        index += 1;
+    }
+    if !hyphen && !parenthesized {
+        return None;
+    }
+    let end = index + 4;
+    if !bytes.get(index..end)?.iter().all(u8::is_ascii_digit) {
+        return None;
+    }
+    if bytes.get(end).is_some_and(u8::is_ascii_digit) {
+        return None;
+    }
+    Some(end)
 }
 
 fn try_id_or_card(bytes: &[u8], start: usize) -> Option<usize> {
@@ -431,7 +486,7 @@ fn iban_checksum(compact: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::{redact, PersonalData};
-    use crate::domain::detectors::{Detector, Finding};
+    use crate::detectors::{Detector, Finding};
 
     fn spans(text: &str) -> Vec<(usize, usize)> {
         PersonalData
@@ -453,6 +508,32 @@ mod tests {
         assert!(spans("CPF 111.111.111-11").is_empty());
         assert!(spans("SSN 000-12-3456").is_empty());
         assert!(spans("Qual o prazo de entrega?").is_empty());
+    }
+
+    #[test]
+    fn masks_brazilian_phones_but_not_dates_cep_or_bare_numbers() {
+        for (text, phone) in [
+            ("ligue (11) 98765-4321 hoje", "(11) 98765-4321"),
+            ("ligue (11)98765-4321 hoje", "(11)98765-4321"),
+            ("ligue (21) 3456-7890 hoje", "(21) 3456-7890"),
+            ("ligue (11) 987654321 hoje", "(11) 987654321"),
+            ("ligue 11 98765-4321 hoje", "11 98765-4321"),
+            ("ligue 98765-4321 hoje", "98765-4321"),
+        ] {
+            let found = spans(text);
+            assert_eq!(found.len(), 1, "{text}");
+            assert_eq!(&text[found[0].0..found[0].1], phone, "{text}");
+        }
+        for text in [
+            "CEP 69000-000",
+            "data 2026-11-22",
+            "pedido 98765432199",
+            "protocolo 1234-5678",
+            "12345-67890",
+            "nota 4,5 de 5",
+        ] {
+            assert!(spans(text).is_empty(), "{text}");
+        }
     }
 
     #[test]

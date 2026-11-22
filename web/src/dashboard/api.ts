@@ -1,0 +1,115 @@
+import type { Action, Category, PanelEvent } from './events.ts'
+
+/** One event as `GET /v1/events` returns it: metadata only, never message text. */
+export type ApiEvent = {
+  id: number
+  timestamp_ms: number
+  route: 'decisions_chat' | 'proxy_chat'
+  direction: 'input' | 'output'
+  action: Action
+  reason_codes: string[]
+}
+
+const ROUTES = new Set(['decisions_chat', 'proxy_chat'])
+const DIRECTIONS = new Set(['input', 'output'])
+const ACTIONS = new Set(['allow', 'mask', 'block'])
+
+/**
+ * Reason codes to panel categories. Hidden characters count as prompt
+ * injection, as agreed with the back-end. File fraud has no code yet.
+ * When an event has more than one code, the most serious one wins.
+ */
+const SEVERITY: [string, Category][] = [
+  ['content.prompt_injection', 'prompt_injection'],
+  ['content.invisible_unicode', 'prompt_injection'],
+  ['content.personal_data', 'sensitive_data'],
+]
+
+/** Threat types the API detects today. File fraud is only in the simulation. */
+export const MONITORED_BY_API: readonly Category[] = ['prompt_injection', 'sensitive_data']
+
+/** Whether the panel has real data for this threat type in the current mode. */
+export function isMonitored(category: Category, live: boolean): boolean {
+  return !live || MONITORED_BY_API.includes(category)
+}
+
+export function categoryFor(reasonCodes: string[]): Category | null {
+  for (const [code, category] of SEVERITY) {
+    if (reasonCodes.includes(code)) return category
+  }
+  return null
+}
+
+function isApiEvent(value: unknown): value is ApiEvent {
+  if (typeof value !== 'object' || value === null) return false
+  const e = value as Record<string, unknown>
+  return (
+    typeof e.id === 'number' && Number.isSafeInteger(e.id) && e.id > 0 &&
+    typeof e.timestamp_ms === 'number' && Number.isSafeInteger(e.timestamp_ms) && e.timestamp_ms >= 0 &&
+    ROUTES.has(e.route as string) &&
+    DIRECTIONS.has(e.direction as string) &&
+    ACTIONS.has(e.action as string) &&
+    Array.isArray(e.reason_codes) &&
+    e.reason_codes.every((code) => typeof code === 'string')
+  )
+}
+
+export function toPanelEvent(event: ApiEvent): PanelEvent {
+  return {
+    id: `api_${event.id}`,
+    timestamp: event.timestamp_ms,
+    category: categoryFor(event.reason_codes),
+    action: event.action,
+    direction: event.direction,
+    ruleId: event.reason_codes.join(',') || 'none',
+    route: event.route,
+    reasonCodes: [...event.reason_codes],
+  }
+}
+
+/**
+ * Reads the body of `GET /v1/events`. Invalid data is an API failure, not an
+ * empty result: silently dropping events would underreport real decisions.
+ */
+export function parseEventsResponse(body: unknown): PanelEvent[] {
+  if (typeof body !== 'object' || body === null || !Array.isArray((body as { events?: unknown }).events)) {
+    throw new Error('Unexpected response from /v1/events')
+  }
+  const events = (body as { events: unknown[] }).events
+  if (!events.every(isApiEvent)) throw new Error('Invalid event in /v1/events response')
+  return events.map(toPanelEvent)
+}
+
+/** The dev server proxies `/api` to the API and adds the key there. */
+export const EVENTS_URL = '/api/v1/events'
+
+export type EventPage = {
+  events: PanelEvent[]
+  nextCursor: string
+  hasMore: boolean
+  gap: boolean
+  reset: boolean
+}
+
+export function parseEventPage(body: unknown): EventPage {
+  const events = parseEventsResponse(body)
+  const page = body as Record<string, unknown>
+  if (typeof page.next_cursor !== 'string' || typeof page.has_more !== 'boolean' ||
+      typeof page.gap !== 'boolean' || typeof page.reset !== 'boolean') {
+    throw new Error('Unexpected pagination metadata from /v1/events')
+  }
+  return {
+    events,
+    nextCursor: page.next_cursor,
+    hasMore: page.has_more,
+    gap: page.gap,
+    reset: page.reset,
+  }
+}
+
+export async function fetchEvents(cursor?: string, signal?: AbortSignal): Promise<EventPage> {
+  const url = cursor ? `${EVENTS_URL}?${new URLSearchParams({ cursor })}` : EVENTS_URL
+  const response = await fetch(url, { signal, cache: 'no-store' })
+  if (!response.ok) throw new Error(`GET /v1/events answered ${response.status}`)
+  return parseEventPage(await response.json())
+}

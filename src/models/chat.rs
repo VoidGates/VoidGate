@@ -2,7 +2,7 @@
 
 use serde::{Deserialize, Serialize};
 
-use crate::domain::detectors::Finding;
+use crate::domain::{action::Action, detectors::Finding};
 
 // No `Debug` and no `Serialize` on purpose: either would make it easy to
 // print or echo the content.
@@ -24,7 +24,7 @@ pub(crate) enum Role {
 
 #[derive(Serialize)]
 pub(crate) struct ChatDecisionResponse {
-    pub(crate) action: &'static str,
+    pub(crate) action: Action,
     pub(crate) reason_codes: Vec<&'static str>,
     pub(crate) findings: Vec<Finding>,
     /// True when there were more findings than `findings` lists.

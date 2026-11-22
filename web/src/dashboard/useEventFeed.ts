@@ -1,10 +1,10 @@
 import { useEffect, useState } from 'react'
 import { fetchEvents } from './api.ts'
-import type { PanelEvent } from './events.ts'
+import { HISTORY_WINDOW, type PanelEvent } from './events.ts'
 import { useSimulatedEvents } from './useSimulatedEvents.ts'
 
 /** simulated: no API reachable; api: live data; stale: the API stopped answering. */
-export type FeedSource = 'simulated' | 'api' | 'stale'
+export type FeedSource = 'simulated' | 'api' | 'partial' | 'stale'
 
 type Feed = { events: PanelEvent[]; now: number; source: FeedSource }
 
@@ -16,7 +16,7 @@ const POLL_EVERY = 2_000
  * the key must never reach the browser.
  */
 export function useEventFeed(paused: boolean): Feed {
-  const [live, setLive] = useState<{ events: PanelEvent[]; now: number; stale: boolean } | null>(null)
+  const [live, setLive] = useState<{ events: PanelEvent[]; now: number; stale: boolean; partial: boolean } | null>(null)
   const simulated = useSimulatedEvents(paused || live !== null)
 
   useEffect(() => {
@@ -24,11 +24,24 @@ export function useEventFeed(paused: boolean): Feed {
     const controller = new AbortController()
     let timer: number
     let connected = false
+    let cursor: string | undefined
+    let currentEvents: PanelEvent[] = []
+    let partial = false
     const poll = async () => {
       try {
-        const events = await fetchEvents(controller.signal)
+        for (let pageNumber = 0; pageNumber < 12; pageNumber += 1) {
+          const page = await fetchEvents(cursor, controller.signal)
+          if (controller.signal.aborted) return
+          if (page.reset || cursor === undefined) currentEvents = []
+          if (page.gap || page.reset) partial = true
+          currentEvents.push(...page.events)
+          cursor = page.nextCursor
+          if (!page.hasMore) break
+          if (pageNumber === 11) partial = true
+        }
+        currentEvents = currentEvents.filter((event) => event.timestamp >= Date.now() - HISTORY_WINDOW)
         connected = true
-        setLive({ events, now: Date.now(), stale: false })
+        setLive({ events: [...currentEvents], now: Date.now(), stale: false, partial })
       } catch {
         if (controller.signal.aborted) return
         // No answer on the first try: stay on the simulation and stop asking,
@@ -48,5 +61,5 @@ export function useEventFeed(paused: boolean): Feed {
   }, [paused])
 
   if (live === null) return { ...simulated, source: 'simulated' }
-  return { events: live.events, now: live.now, source: live.stale ? 'stale' : 'api' }
+  return { events: live.events, now: live.now, source: live.stale ? 'stale' : live.partial ? 'partial' : 'api' }
 }

@@ -250,7 +250,14 @@ mod tests {
     fn summary(events: &[Event]) -> Vec<Seen> {
         events
             .iter()
-            .map(|e| (e.route, e.direction, e.action, e.reason_codes.clone()))
+            .map(|e| {
+                let action = match e.action {
+                    crate::domain::action::Action::Allow => "allow",
+                    crate::domain::action::Action::Mask => "mask",
+                    crate::domain::action::Action::Block => "block",
+                };
+                (e.route, e.direction, action, e.reason_codes.clone())
+            })
             .collect()
     }
 

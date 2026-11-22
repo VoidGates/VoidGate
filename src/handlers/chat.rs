@@ -48,6 +48,7 @@ mod tests {
     use super::MAX_BODY_BYTES;
     use crate::{
         app,
+        domain::action::Action,
         events::{Direction, Route},
         services::chat::{MAX_CONTENT_BYTES, MAX_FINDINGS},
         AppState,
@@ -334,9 +335,21 @@ mod tests {
         assert_eq!(
             seen,
             vec![
-                (Direction::Input, "mask", vec!["content.personal_data"]),
-                (Direction::Input, "mask", vec!["content.personal_data"]),
-                (Direction::Output, "mask", vec!["content.personal_data"]),
+                (
+                    Direction::Input,
+                    Action::Mask,
+                    vec!["content.personal_data"]
+                ),
+                (
+                    Direction::Input,
+                    Action::Mask,
+                    vec!["content.personal_data"]
+                ),
+                (
+                    Direction::Output,
+                    Action::Mask,
+                    vec!["content.personal_data"]
+                ),
             ]
         );
         assert!(events
@@ -353,9 +366,9 @@ mod tests {
         assert_eq!(events.len(), 2);
         assert_eq!(
             (events[0].action, events[0].reason_codes.len()),
-            ("allow", 0)
+            (Action::Allow, 0)
         );
-        assert_eq!(events[1].action, "block");
+        assert_eq!(events[1].action, Action::Block);
         assert_eq!(events[1].reason_codes, vec!["content.prompt_injection"]);
     }
 

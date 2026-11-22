@@ -12,6 +12,7 @@
 <p align="center">
   <a href="https://github.com/VoidGates/VoidGate/actions/workflows/rust.yml"><img src="https://github.com/VoidGates/VoidGate/actions/workflows/rust.yml/badge.svg?branch=develop" alt="Rust"></a>
   <a href="https://github.com/VoidGates/VoidGate/actions/workflows/web.yml"><img src="https://github.com/VoidGates/VoidGate/actions/workflows/web.yml/badge.svg?branch=develop" alt="Site"></a>
+  <img src="https://img.shields.io/badge/python-3.10%2B-blue" alt="Python 3.10+">
   <a href="LICENSE"><img src="https://img.shields.io/badge/licença-Apache--2.0-blue" alt="Licença Apache-2.0"></a>
 </p>
 
@@ -31,19 +32,23 @@
 
 ## Por quê
 
-Chatbots e agentes de IA recebem texto de fora: mensagem do cliente, página web, PDF, resposta de API. Qualquer um desses textos pode carregar uma instrução que faz o modelo ignorar as regras da empresa (**injeção de prompt**, risco nº 1 do [OWASP Top 10 para LLM](https://genai.owasp.org/llm-top-10/)). E dado pessoal que passa pelo modelo pode vazar, o que, pela LGPD, é incidente de quem opera o chatbot.
+Chatbots e agentes de IA processam texto que vem de fora: mensagem do cliente, página web, PDF, resposta de API. Qualquer um desses textos pode trazer uma instrução que faz o modelo ignorar as regras da empresa. Isso é **injeção de prompt**, o risco nº 1 do [OWASP Top 10 para LLM](https://genai.owasp.org/llm-top-10/). E dado pessoal que passa pelo modelo pode vazar, o que, pela LGPD, é incidente de quem opera o chatbot.
 
-O VoidGate confere cada texto e decide:
+O VoidGate confere cada texto e devolve uma decisão:
 
-| Ação | Quando | O que fazer |
+| Ação | Quando | O que a aplicação faz |
 | --- | --- | --- |
-| `allow` | Nada encontrado | Segue normal |
+| `allow` | Nada encontrado | Segue normalmente |
 | `mask` | Só dado pessoal | Segue com o dado trocado por `[redacted]` |
-| `block` | Manipulação ou caractere oculto | Não manda pro modelo |
+| `block` | Manipulação ou caractere oculto | Não envia ao modelo |
 
-Feito para o português do Brasil (CPF, CNPJ, golpe escrito em pt-BR) e funciona com qualquer modelo: OpenAI, Anthropic, Google, modelo próprio ou local.
+Feito para o português do Brasil (CPF, CNPJ, telefone e golpes escritos em pt-BR). Funciona com qualquer modelo: OpenAI, Anthropic, Google, modelo próprio ou local.
 
-## Exemplo
+## Início rápido
+
+```sh
+pip install "voidgate @ git+https://github.com/VoidGates/VoidGate@develop#subdirectory=bindings/python"
+```
 
 ```python
 import voidgate
@@ -56,7 +61,9 @@ r.action     # "mask"
 r.redacted   # "Meu CPF é [redacted]"
 ```
 
-Em agente, confira também o resultado de cada ferramenta. É por ali que chega a injeção indireta:
+### Em agentes
+
+Confira também o resultado de cada ferramenta. É por ali que chega a injeção indireta:
 
 ```python
 def chamar_ferramenta(nome, args):
@@ -65,25 +72,33 @@ def chamar_ferramenta(nome, args):
     return "[bloqueado]" if r.action == "block" else r.redacted
 ```
 
-Exemplo completo, sem chave de API: [`bindings/python/examples/agente_simples.py`](bindings/python/examples/agente_simples.py).
+Exemplo completo, que roda sem chave de API: [`bindings/python/examples/agente_simples.py`](bindings/python/examples/agente_simples.py).
 
 ## Duas formas de usar
 
-O mesmo motor ([`voidgate-core`](crates/voidgate-core)) roda nos dois modos.
+O mesmo motor ([`voidgate-core`](crates/voidgate-core)) atende os dois modos.
 
 | | Biblioteca | Servidor |
 | --- | --- | --- |
-| **Como** | `import voidgate` no seu código | Serviço HTTP na frente do modelo |
-| **Roda** | No seu processo, sem rede | Processo separado |
-| **Se cair** | Não existe servidor pra cair | O integrador deve falhar fechado |
-| **Bom para** | Agentes e apps em Python ou Rust | Proteção central, qualquer linguagem, proxy compatível com OpenAI |
-| **Extras** | — | Chave de API, rate limit, métricas, eventos de decisão |
+| **Uso** | `import voidgate` no seu código | Serviço HTTP na frente do modelo |
+| **Execução** | No seu processo, sem rede | Processo separado |
+| **Disponibilidade** | Não há servidor para cair | O integrador deve falhar fechado |
+| **Indicado para** | Agentes e aplicações em Python ou Rust | Proteção central, qualquer linguagem, proxy no formato OpenAI |
+| **Recursos extras** | — | Chave de API, rate limit, métricas, eventos de decisão |
 
 ## Instalação
 
+O pacote ainda não está publicado no PyPI nem no crates.io. Por enquanto, instale a partir do repositório.
+
 ### Python
 
-Requer Python 3.10+. Ainda não está no PyPI; instale a partir do código:
+Requer Python 3.10+ e [Rust estável](https://rustup.rs), porque o pacote é compilado na instalação.
+
+```sh
+pip install "voidgate @ git+https://github.com/VoidGates/VoidGate@develop#subdirectory=bindings/python"
+```
+
+Para gerar o wheel a partir de um clone:
 
 ```sh
 pip install maturin
@@ -91,38 +106,38 @@ maturin build --release -m bindings/python/Cargo.toml -o dist
 pip install dist/voidgate-*.whl
 ```
 
-Detalhes da API em [`bindings/python`](bindings/python).
+A API completa está em [`bindings/python`](bindings/python).
 
 ### Rust
 
 ```toml
 [dependencies]
-voidgate-core = { git = "https://github.com/VoidGates/VoidGate" }
+voidgate-core = { git = "https://github.com/VoidGates/VoidGate", branch = "develop" }
 ```
 
-Sem dependências e sem IO. A feature `serde` adiciona `Serialize`. Detalhes em [`crates/voidgate-core`](crates/voidgate-core).
+Não tem dependências nem faz IO. A feature `serde` adiciona `Serialize` aos tipos. Mais detalhes em [`crates/voidgate-core`](crates/voidgate-core).
 
 ### Servidor
 
-Requer Rust estável. `VOIDGATE_API_KEY` deve ter de 32 a 128 bytes.
+Requer Rust estável. A chave `VOIDGATE_API_KEY` deve ter de 32 a 128 bytes.
 
 ```powershell
 Copy-Item .env.example .env   # preencha VOIDGATE_API_KEY
 cargo run --locked --release
 ```
 
-Escuta em `http://127.0.0.1:8080`.
+O servidor escuta em `http://127.0.0.1:8080`.
 
 | Rota | O que faz |
 | --- | --- |
 | `POST /v1/decisions/chat` | Decide uma mensagem: `allow`, `mask` ou `block`, com os achados |
-| `POST /v1/proxy/chat` | Proxy compatível com OpenAI: mascara ou bloqueia na ida e mascara na volta (requer `VOIDGATE_UPSTREAM_URL`) |
-| `POST /v1/decisions/http` | Marca caminho HTTP como isca (`decoy`) |
+| `POST /v1/proxy/chat` | Proxy no formato OpenAI Chat Completions: bloqueia ou mascara na ida e mascara a resposta na volta (requer `VOIDGATE_UPSTREAM_URL`) |
+| `POST /v1/decisions/http` | Marca caminhos HTTP configurados como isca (`decoy`) |
 | `GET /v1/events` | Decisões recentes, só metadados |
 | `GET /metrics` | Contadores no formato Prometheus |
 | `GET /health` `/live` `/ready` | Saúde do processo (públicas) |
 
-Todas as rotas, exceto as de saúde, exigem o cabeçalho `x-voidgate-key`. O contrato completo, os erros e exemplos estão na [referência](docs/referencia.md).
+Todas as rotas, exceto as de saúde, exigem o cabeçalho `x-voidgate-key`. O contrato completo, os erros e os exemplos estão na [referência](docs/referencia.md).
 
 ## O que detecta
 
@@ -130,18 +145,31 @@ Todas as rotas, exceto as de saúde, exigem o cabeçalho `x-voidgate-key`. O con
 | --- | --- | --- |
 | `content.prompt_injection` | `block` | Frases de manipulação em português, inglês, espanhol, francês, alemão e chinês, e tokens de controle de modelo |
 | `content.invisible_unicode` | `block` | Caracteres invisíveis, controles bidirecionais (Trojan Source) e tags Unicode |
-| `content.personal_data` | `mask` | E-mail, telefone (E.164 e brasileiro), cartão (Luhn), IBAN, CPF, CNPJ e SSN |
+| `content.personal_data` | `mask` | E-mail, telefone (E.164 e brasileiro, como `(11) 98765-4321`), cartão (Luhn), IBAN, CPF, CNPJ e SSN |
 
-`block` prevalece sobre `mask`. Os achados trazem só a posição do trecho, nunca o texto, então podem ir para log.
+`block` prevalece sobre `mask`. Os achados trazem só a posição do trecho, nunca o texto, e podem ir para log.
 
-Antes da comparação, o texto é normalizado: caracteres fullwidth, letras matemáticas, homóglifos cirílicos e gregos, leetspeak (`1gn0r3`) e letras soletradas (`i.g.n.o.r.e`) voltam à forma simples. Disfarce visual não fura a lista.
+Antes da comparação, o texto é normalizado: caracteres fullwidth (`Ｉｇｎｏｒｅ`), letras matemáticas (`𝐢𝐠𝐧𝐨𝐫𝐞`), homóglifos cirílicos e gregos, leetspeak (`1gn0r3`) e letras soletradas (`i.g.n.o.r.e`) voltam à forma simples. Disfarce visual não escapa da lista.
+
+## Compatibilidade e validação
+
+| Item | Validado |
+| --- | --- |
+| Sistemas | Linux, Windows e macOS, a cada push, no CI |
+| Python | 3.10 e 3.13 no CI, mais 3.11, 3.12 e 3.15 localmente. Um único wheel `abi3` serve para todas as versões a partir da 3.10. |
+| Proxy | Testado com um modelo real (Ollama `qwen2.5:7b`): o dado pessoal é mascarado antes de chegar ao modelo, o que o modelo gera é mascarado na volta, e a injeção é recusada sem chamar o modelo |
+| Contrato HTTP | Comparado byte a byte com a versão anterior ao extrair a biblioteca |
+| Desempenho | ~0,4 s por MB de texto. Uma mensagem de 16 KiB leva no pior caso ~5 ms. Medido em Windows x86-64, build release. |
+
+A cada push, o CI roda formatação, Clippy, os testes Rust, `cargo audit`, o pytest do pacote, o exemplo de agente e as suítes do site.
 
 ## Limites
 
 O projeto está antes da versão 1.0. Leve em conta:
 
-- A detecção de manipulação é uma **lista fechada de padrões**, não um classificador. Ela reduz o risco, mas não o elimina.
-- O servidor não tem TLS no processo, rate limit compartilhado entre réplicas nem múltiplas empresas. Coloque-o atrás de um gateway com TLS.
+- A detecção de manipulação é uma **lista fechada de padrões**, não um classificador. A normalização impede disfarces, mas uma paráfrase nova ainda pode passar.
+- O proxy não aceita `stream: true`: a requisição recebe `503` (falha fechado). Conteúdo multimodal (`content` em lista) recebe `400`.
+- O servidor não tem TLS no processo, rate limit compartilhado entre réplicas nem várias empresas na mesma instalação. Coloque-o atrás de um gateway com TLS.
 - Os eventos de decisão ficam em memória e se perdem quando o processo reinicia.
 - A demonstração do site usa regras simplificadas no navegador e não é o motor.
 

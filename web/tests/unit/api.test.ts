@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { categoryFor, isMonitored, parseEventsResponse, toPanelEvent } from '../../src/dashboard/api.ts'
+import { categoryFor, isMonitored, parseEventPage, parseEventsResponse, toPanelEvent } from '../../src/dashboard/api.ts'
 import type { ApiEvent } from '../../src/dashboard/api.ts'
 
 const base: ApiEvent = {
@@ -68,6 +68,20 @@ test('resposta: corpo sem a lista de eventos é recusado', () => {
   assert.throws(() => parseEventsResponse([base]))
   assert.throws(() => parseEventsResponse({ error: { code: 'unauthorized' } }))
   assert.throws(() => parseEventsResponse(null))
+})
+
+test('pagina de eventos exige cursor e sinais de perda validos', () => {
+  const page = parseEventPage({
+    events: [base],
+    next_cursor: 'abcdef0123456789:7',
+    has_more: false,
+    gap: true,
+    reset: false,
+  })
+  assert.equal(page.events[0].id, 'api_7')
+  assert.equal(page.nextCursor, 'abcdef0123456789:7')
+  assert.equal(page.gap, true)
+  assert.throws(() => parseEventPage({ events: [base] }))
 })
 
 test('fraude por arquivo só aparece como monitorada na simulação', () => {

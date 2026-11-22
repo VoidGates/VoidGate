@@ -6,7 +6,7 @@
 use serde_json::{json, Value};
 
 use crate::{
-    domain::detectors::{personal_data, Detector},
+    domain::{action::Action, detectors::{personal_data, Detector}},
     error::AppError,
     services::chat::{action_of, inspect, Verdict, MAX_CONTENT_BYTES},
 };
@@ -50,9 +50,9 @@ pub(crate) fn gate(
         let findings = inspect(detectors, content);
         verdict.absorb(&findings);
         match action_of(&findings) {
-            "block" => block = true,
-            "mask" => masked.push((index, personal_data::redact(content, &findings))),
-            _ => {}
+            Action::Block => block = true,
+            Action::Mask => masked.push((index, personal_data::redact(content, &findings))),
+            Action::Allow => {}
         }
     }
     if block {
@@ -89,9 +89,9 @@ pub(crate) fn scrub(
             let findings = inspect(detectors, &owned);
             verdict.absorb(&findings);
             match action_of(&findings) {
-                "block" => *content = json!(REFUSAL),
-                "mask" => *content = json!(personal_data::redact(&owned, &findings)),
-                _ => {}
+                Action::Block => *content = json!(REFUSAL),
+                Action::Mask => *content = json!(personal_data::redact(&owned, &findings)),
+                Action::Allow => {}
             }
         }
     }

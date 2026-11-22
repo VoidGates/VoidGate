@@ -70,7 +70,7 @@ export function Dashboard() {
         <div className="dash__controls">
           <span className={`dash__demo dash__demo--${source}`}>
             <span className="dot" aria-hidden="true" />
-            {source === 'api' ? copy.live : source === 'stale' ? copy.stale : copy.demo}
+            {source === 'api' ? copy.live : source === 'partial' ? copy.partial : source === 'stale' ? copy.stale : copy.demo}
           </span>
           <button type="button" className="dash__button" aria-pressed={paused} onClick={() => setPaused((value) => !value)}>
             {paused ? copy.resume : copy.pause}

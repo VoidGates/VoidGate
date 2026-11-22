@@ -1,7 +1,7 @@
 //! Chat decision. `block` wins over `mask`. Personal data alone is `mask`.
 
 use crate::{
-    domain::detectors::{personal_data, Detector, Finding},
+    domain::{action::Action, detectors::{personal_data, Detector, Finding}},
     error::AppError,
     events::Direction,
     models::chat::{ChatDecisionRequest, ChatDecisionResponse, Role},
@@ -13,10 +13,6 @@ pub(crate) const MAX_CONTENT_BYTES: usize = 16 * 1024;
 /// Findings listed in one response; the decision still counts all of them.
 pub(crate) const MAX_FINDINGS: usize = 100;
 
-const ACTION_ALLOW: &str = "allow";
-const ACTION_BLOCK: &str = "block";
-const ACTION_MASK: &str = "mask";
-
 pub(crate) fn inspect(detectors: &[Box<dyn Detector>], content: &str) -> Vec<Finding> {
     let mut findings: Vec<Finding> = detectors
         .iter()
@@ -27,16 +23,16 @@ pub(crate) fn inspect(detectors: &[Box<dyn Detector>], content: &str) -> Vec<Fin
 }
 
 /// `block` wins over `mask`. Any code other than personal data blocks.
-pub(crate) fn action_of(findings: &[Finding]) -> &'static str {
+pub(crate) fn action_of(findings: &[Finding]) -> Action {
     if findings
         .iter()
         .any(|finding| finding.code != personal_data::REASON_CODE)
     {
-        ACTION_BLOCK
+        Action::Block
     } else if findings.is_empty() {
-        ACTION_ALLOW
+        Action::Allow
     } else {
-        ACTION_MASK
+        Action::Mask
     }
 }
 
@@ -44,14 +40,14 @@ pub(crate) fn action_of(findings: &[Finding]) -> &'static str {
 /// (`block` > `mask` > `allow`) and the reason codes of every piece, each once.
 /// The proxy builds one per request and one per model reply.
 pub(crate) struct Verdict {
-    pub(crate) action: &'static str,
+    pub(crate) action: Action,
     pub(crate) reason_codes: Vec<&'static str>,
 }
 
 impl Verdict {
     pub(crate) fn allow() -> Self {
         Self {
-            action: ACTION_ALLOW,
+            action: Action::Allow,
             reason_codes: Vec::new(),
         }
     }
@@ -59,7 +55,7 @@ impl Verdict {
     /// Folds in the findings of one more piece of text.
     pub(crate) fn absorb(&mut self, findings: &[Finding]) {
         let action = action_of(findings);
-        if severity(action) > severity(self.action) {
+        if action.severity() > self.action.severity() {
             self.action = action;
         }
         for finding in findings {
@@ -67,14 +63,6 @@ impl Verdict {
                 self.reason_codes.push(finding.code);
             }
         }
-    }
-}
-
-fn severity(action: &str) -> u8 {
-    match action {
-        ACTION_BLOCK => 2,
-        ACTION_MASK => 1,
-        _ => 0,
     }
 }
 

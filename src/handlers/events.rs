@@ -4,16 +4,27 @@
 //! event log has no field that could hold them.
 
 use axum::{
-    extract::State,
+    extract::{rejection::QueryRejection, Query, State},
     http::header::{HeaderValue, CACHE_CONTROL},
     response::{IntoResponse, Response},
     Json,
 };
+use serde::Deserialize;
 
 use crate::{error::AppError, services, AppState};
 
-pub(crate) async fn list(State(state): State<AppState>) -> Result<Response, AppError> {
-    let body = services::events::latest(&state.events)?;
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+pub(crate) struct EventsQuery {
+    cursor: Option<String>,
+}
+
+pub(crate) async fn list(
+    State(state): State<AppState>,
+    query: Result<Query<EventsQuery>, QueryRejection>,
+) -> Result<Response, AppError> {
+    let Query(query) = query.map_err(|_| AppError::InvalidBody)?;
+    let body = services::events::latest(&state.events, query.cursor.as_deref())?;
     // Decisions about people's messages: no proxy or browser keeps a copy.
     Ok((
         [(CACHE_CONTROL, HeaderValue::from_static("no-store"))],
@@ -35,6 +46,7 @@ mod tests {
 
     use crate::{
         app,
+        domain::action::Action,
         events::{Direction, Route, MAX_EVENTS, MAX_EVENTS_PER_RESPONSE},
         AppState, RateLimitConfig,
     };
@@ -114,7 +126,12 @@ mod tests {
     async fn empty_log_is_an_object_with_an_empty_list_and_is_not_cached() {
         let (status, headers, body) = events(&state()).await;
         assert_eq!(status, StatusCode::OK);
-        assert_eq!(body, r#"{"events":[]}"#);
+        let json: Value = serde_json::from_str(&body).expect("json");
+        assert_eq!(json["events"], json!([]));
+        assert!(json["next_cursor"].as_str().is_some());
+        assert_eq!(json["has_more"], false);
+        assert_eq!(json["gap"], false);
+        assert_eq!(json["reset"], false);
         assert_eq!(
             headers.get(CACHE_CONTROL).expect("cache-control"),
             "no-store"
@@ -146,7 +163,7 @@ mod tests {
             "no-store"
         );
         let json: Value = serde_json::from_str(&body).expect("json");
-        assert_eq!(json.as_object().map(|o| o.len()), Some(1));
+        assert_eq!(json.as_object().map(|o| o.len()), Some(5));
         let list = json["events"].as_array().expect("events array");
         assert_eq!(list.len(), 1);
         let event = list[0].as_object().expect("event object");
@@ -184,7 +201,7 @@ mod tests {
         for _ in 0..total {
             state
                 .events
-                .record(Route::DecisionsChat, Direction::Input, "allow", vec![])
+                .record(Route::DecisionsChat, Direction::Input, Action::Allow, vec![])
                 .expect("record");
         }
 

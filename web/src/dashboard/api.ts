@@ -81,8 +81,33 @@ export function parseEventsResponse(body: unknown): PanelEvent[] {
 /** The dev server proxies `/api` to the API and adds the key there. */
 export const EVENTS_URL = '/api/v1/events'
 
-export async function fetchEvents(signal?: AbortSignal): Promise<PanelEvent[]> {
-  const response = await fetch(EVENTS_URL, { signal, cache: 'no-store' })
+export type EventPage = {
+  events: PanelEvent[]
+  nextCursor: string
+  hasMore: boolean
+  gap: boolean
+  reset: boolean
+}
+
+export function parseEventPage(body: unknown): EventPage {
+  const events = parseEventsResponse(body)
+  const page = body as Record<string, unknown>
+  if (typeof page.next_cursor !== 'string' || typeof page.has_more !== 'boolean' ||
+      typeof page.gap !== 'boolean' || typeof page.reset !== 'boolean') {
+    throw new Error('Unexpected pagination metadata from /v1/events')
+  }
+  return {
+    events,
+    nextCursor: page.next_cursor,
+    hasMore: page.has_more,
+    gap: page.gap,
+    reset: page.reset,
+  }
+}
+
+export async function fetchEvents(cursor?: string, signal?: AbortSignal): Promise<EventPage> {
+  const url = cursor ? `${EVENTS_URL}?${new URLSearchParams({ cursor })}` : EVENTS_URL
+  const response = await fetch(url, { signal, cache: 'no-store' })
   if (!response.ok) throw new Error(`GET /v1/events answered ${response.status}`)
-  return parseEventsResponse(await response.json())
+  return parseEventPage(await response.json())
 }

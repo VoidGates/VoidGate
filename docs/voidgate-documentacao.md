@@ -276,7 +276,7 @@ Não há dependência externa configurada nesta etapa.
 
 ### Eventos de decisão
 
-`GET /v1/events` devolve `{"events": [...]}` com as decisões dos últimos 30 minutos, no máximo 1000, do mais antigo para o mais novo. Cada evento tem `id`, `timestamp_ms`, `route` (`decisions_chat` ou `proxy_chat`), `direction` (`input` ou `output`), `action` e `reason_codes`. Não há texto, trecho, posição, pontuação nem regra. A resposta leva `Cache-Control: no-store`. A rota exige a chave, não consome o limite de decisões e não deve ser chamada do navegador.
+`GET /v1/events` devolve os eventos dos últimos 30 minutos, no máximo 1000 por página, do mais antigo para o mais novo. A resposta inclui `events`, `next_cursor`, `has_more`, `gap` e `reset`. Envie `next_cursor` como `?cursor=` na leitura seguinte; enquanto `has_more` for verdadeiro, continue lendo. `gap` informa perda de eventos e `reset` informa que o cursor veio de outra instância ou de antes de um reinício. Cada evento tem `id`, `timestamp_ms`, `route` (`decisions_chat` ou `proxy_chat`), `direction` (`input` ou `output`), `action` e `reason_codes`. Não há texto, trecho, posição, pontuação nem regra. A resposta leva `Cache-Control: no-store`. A rota exige a chave, não consome o limite de decisões e não deve ser chamada do navegador.
 
 Em `POST /v1/decisions/chat`, o papel `assistant` gera `output`; `user` e `system` geram `input`. Em `POST /v1/proxy/chat` há um evento `input` por requisição, com a pior ação entre as mensagens, assim que a decisão sai, e um `output` só se o modelo respondeu. Erro de validação não gera evento.
 

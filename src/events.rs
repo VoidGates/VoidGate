@@ -7,6 +7,7 @@
 
 use std::{
     collections::VecDeque,
+    hash::{BuildHasher, RandomState},
     sync::Mutex,
     time::{SystemTime, UNIX_EPOCH},
 };
@@ -15,7 +16,7 @@ use std::{sync::Arc, thread};
 
 use serde::Serialize;
 
-use crate::error::AppError;
+use crate::{domain::action::Action, error::AppError};
 
 /// Events kept at once; the oldest is dropped first.
 pub(crate) const MAX_EVENTS: usize = 10_000;
@@ -48,8 +49,7 @@ pub(crate) struct Event {
     pub(crate) timestamp_ms: u64,
     pub(crate) route: Route,
     pub(crate) direction: Direction,
-    /// `allow`, `mask` or `block`, as `services::chat::action_of` returns it.
-    pub(crate) action: &'static str,
+    pub(crate) action: Action,
     pub(crate) reason_codes: Vec<&'static str>,
 }
 
@@ -60,6 +60,15 @@ struct Inner {
 
 pub(crate) struct EventLog {
     inner: Mutex<Inner>,
+    stream_id: u64,
+}
+
+pub(crate) struct EventPage {
+    pub(crate) events: Vec<Event>,
+    pub(crate) next_cursor: String,
+    pub(crate) has_more: bool,
+    pub(crate) gap: bool,
+    pub(crate) reset: bool,
 }
 
 impl EventLog {
@@ -69,6 +78,7 @@ impl EventLog {
                 events: VecDeque::new(),
                 next_id: 1,
             }),
+            stream_id: RandomState::new().hash_one(0_u8),
         }
     }
 
@@ -78,7 +88,7 @@ impl EventLog {
         &self,
         route: Route,
         direction: Direction,
-        action: &'static str,
+        action: Action,
         reason_codes: Vec<&'static str>,
     ) -> Result<(), AppError> {
         let mut inner = self.inner.lock().map_err(|_| AppError::Unavailable)?;
@@ -93,6 +103,60 @@ impl EventLog {
     pub(crate) fn recent(&self, limit: usize) -> Result<Vec<Event>, AppError> {
         let inner = self.inner.lock().map_err(|_| AppError::Unavailable)?;
         Ok(recent_locked(&inner, now_ms()?, limit))
+    }
+
+    /// Continues from an opaque cursor. A cursor from another process or a
+    /// previous run resets the stream; dropped events are reported as a gap.
+    pub(crate) fn page(&self, cursor: Option<&str>) -> Result<EventPage, AppError> {
+        let parsed = cursor.map(parse_cursor).transpose()?;
+        let inner = self.inner.lock().map_err(|_| AppError::Unavailable)?;
+        let now = now_ms()?;
+        let cutoff = now.saturating_sub(WINDOW_MS);
+        let reset = parsed.is_some_and(|(stream, _)| stream != self.stream_id);
+        let after_id = parsed.filter(|_| !reset).map(|(_, id)| id);
+        if after_id.is_some_and(|id| id >= inner.next_id) {
+            return Err(AppError::InvalidBody);
+        }
+        let retained: Vec<&Event> = inner
+            .events
+            .iter()
+            .filter(|event| event.timestamp_ms >= cutoff)
+            .collect();
+        let gap = after_id.map_or(retained.len() > MAX_EVENTS_PER_RESPONSE, |id| {
+            let first_available = retained.first().map_or(inner.next_id, |event| event.id);
+            id.saturating_add(1) < first_available
+        });
+        let mut events: Vec<Event> = if let Some(id) = after_id {
+            retained
+                .iter()
+                .filter(|event| event.id > id)
+                .take(MAX_EVENTS_PER_RESPONSE + 1)
+                .map(|event| (*event).clone())
+                .collect()
+        } else {
+            retained
+                .iter()
+                .rev()
+                .take(MAX_EVENTS_PER_RESPONSE)
+                .rev()
+                .map(|event| (*event).clone())
+                .collect()
+        };
+        let has_more = events.len() > MAX_EVENTS_PER_RESPONSE;
+        if has_more {
+            events.pop();
+        }
+        let last_id = events.last().map_or_else(
+            || after_id.map_or(inner.next_id.saturating_sub(1), |id| id.max(inner.next_id.saturating_sub(1))),
+            |event| event.id,
+        );
+        Ok(EventPage {
+            events,
+            next_cursor: format!("{:016x}:{last_id}", self.stream_id),
+            has_more,
+            gap,
+            reset,
+        })
     }
 
     /// Poisons the lock the way a panic in another thread would.
@@ -112,7 +176,7 @@ impl EventLog {
         now: u64,
         route: Route,
         direction: Direction,
-        action: &'static str,
+        action: Action,
         reason_codes: Vec<&'static str>,
     ) -> Result<(), AppError> {
         let mut inner = self.inner.lock().map_err(|_| AppError::Unavailable)?;
@@ -127,12 +191,22 @@ impl EventLog {
     }
 }
 
+fn parse_cursor(cursor: &str) -> Result<(u64, u64), AppError> {
+    let (stream, id) = cursor.split_once(':').ok_or(AppError::InvalidBody)?;
+    if stream.len() != 16 || id.is_empty() || !id.bytes().all(|b| b.is_ascii_digit()) {
+        return Err(AppError::InvalidBody);
+    }
+    let stream = u64::from_str_radix(stream, 16).map_err(|_| AppError::InvalidBody)?;
+    let id = id.parse().map_err(|_| AppError::InvalidBody)?;
+    Ok((stream, id))
+}
+
 fn push_locked(
     inner: &mut Inner,
     now: u64,
     route: Route,
     direction: Direction,
-    action: &'static str,
+    action: Action,
     reason_codes: Vec<&'static str>,
 ) {
     let id = inner.next_id;
@@ -188,12 +262,20 @@ mod tests {
 
     use serde_json::json;
 
-    use super::{Direction, Event, EventLog, Route, MAX_EVENTS, WINDOW_MS};
+    use super::{Direction, Event, EventLog, Route, MAX_EVENTS, MAX_EVENTS_PER_RESPONSE, WINDOW_MS};
     use crate::error::AppError;
+
+    use super::Action;
 
     const T0: u64 = 10_000_000;
 
     fn push(log: &EventLog, now: u64, action: &'static str) {
+        let action = match action {
+            "allow" => Action::Allow,
+            "mask" => Action::Mask,
+            "block" => Action::Block,
+            _ => panic!("unknown test action"),
+        };
         log.record_at(now, Route::DecisionsChat, Direction::Input, action, vec![])
             .expect("record");
     }
@@ -212,7 +294,7 @@ mod tests {
         let events = log.recent_at(T0 + 2, 10).expect("recent");
         assert_eq!(ids(&events), vec![1, 2, 3]);
         let actions: Vec<_> = events.iter().map(|event| event.action).collect();
-        assert_eq!(actions, vec!["allow", "mask", "block"]);
+        assert_eq!(actions, vec![Action::Allow, Action::Mask, Action::Block]);
     }
 
     #[test]
@@ -282,12 +364,40 @@ mod tests {
     }
 
     #[test]
+    fn cursor_reads_the_next_page_without_repeating_events() {
+        let log = EventLog::new();
+        for _ in 0..MAX_EVENTS_PER_RESPONSE + 2 {
+            log.record(Route::DecisionsChat, Direction::Input, Action::Allow, vec![])
+                .expect("record");
+        }
+        let cursor = format!("{:016x}:0", log.stream_id);
+        let first = log.page(Some(&cursor)).expect("first page");
+        assert_eq!(first.events.len(), MAX_EVENTS_PER_RESPONSE);
+        assert!(first.has_more);
+        let second = log.page(Some(&first.next_cursor)).expect("second page");
+        assert_eq!(second.events.len(), 2);
+        assert!(!second.has_more);
+        assert_eq!(second.events.first().map(|event| event.id), Some(1001));
+    }
+
+    #[test]
+    fn cursor_from_another_run_resets_and_bad_cursor_is_rejected() {
+        let log = EventLog::new();
+        log.record(Route::DecisionsChat, Direction::Input, Action::Allow, vec![])
+            .expect("record");
+        let other = EventLog::new();
+        let cursor = other.page(None).expect("cursor").next_cursor;
+        assert!(log.page(Some(&cursor)).expect("reset").reset);
+        assert!(log.page(Some("invalid")).is_err());
+    }
+
+    #[test]
     fn recent_and_record_use_the_real_clock() {
         let log = EventLog::new();
         log.record(
             Route::ProxyChat,
             Direction::Output,
-            "block",
+            Action::Block,
             vec!["content.prompt_injection"],
         )
         .expect("record");
@@ -303,7 +413,7 @@ mod tests {
             timestamp_ms: 1_700_000_000_000,
             route: Route::ProxyChat,
             direction: Direction::Output,
-            action: "mask",
+            action: Action::Mask,
             reason_codes: vec!["content.personal_data"],
         };
         assert_eq!(
@@ -325,7 +435,7 @@ mod tests {
         log.poison_for_test();
 
         assert_eq!(
-            log.record(Route::DecisionsChat, Direction::Input, "allow", vec![]),
+            log.record(Route::DecisionsChat, Direction::Input, Action::Allow, vec![]),
             Err(AppError::Unavailable)
         );
         assert_eq!(log.recent(10), Err(AppError::Unavailable));

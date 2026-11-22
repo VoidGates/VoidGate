@@ -109,7 +109,16 @@
           "Operação"
         ],
         "summary": "Decisões recentes, só metadados",
-        "description": "Os eventos dos últimos 30 minutos, no máximo 1000, do mais antigo para o mais novo. Cada evento traz a rota, o sentido, a ação e os códigos de motivo. Nunca traz o texto da mensagem, trechos, posições, pontuação nem regra. Em `POST /v1/proxy/chat` há um evento `input` por requisição (a pior ação entre as mensagens) e, se o modelo respondeu, um `output`. Os eventos ficam na memória do processo: reiniciar apaga. Não consome o limite de decisões.",
+        "description": "Os eventos dos últimos 30 minutos, no máximo 1000 por página, do mais antigo para o mais novo. Envie `next_cursor` na próxima chamada para receber apenas eventos posteriores. `gap` indica perda de eventos; `reset` indica reinício ou outra réplica. Cada evento traz a rota, o sentido, a ação e os códigos de motivo, sem texto da mensagem. Os eventos ficam na memória do processo. Não consome o limite de decisões.",
+        "parameters": [
+          {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "description": "Cursor opaco retornado como `next_cursor` pela leitura anterior.",
+            "schema": { "type": "string" }
+          }
+        ],
         "security": [
           {
             "ApiKey": []
@@ -552,7 +561,11 @@
         "type": "object",
         "description": "Um objeto, e não uma lista solta, para que novos campos possam entrar depois sem quebrar quem já lê `events`.",
         "required": [
-          "events"
+          "events",
+          "next_cursor",
+          "has_more",
+          "gap",
+          "reset"
         ],
         "properties": {
           "events": {
@@ -561,7 +574,11 @@
             "items": {
               "$ref": "#/components/schemas/Event"
             }
-          }
+          },
+          "next_cursor": { "type": "string", "description": "Envie como `cursor` na próxima leitura." },
+          "has_more": { "type": "boolean", "description": "Há mais eventos disponíveis imediatamente após esta página." },
+          "gap": { "type": "boolean", "description": "Parte do histórico não está mais disponível nesta instância." },
+          "reset": { "type": "boolean", "description": "O cursor era de outra instância ou de uma execução anterior." }
         }
       },
       "Event": {

@@ -47,11 +47,26 @@ impl Inspection {
     }
 }
 
-/// Code-point index of a byte offset. Counts lead bytes instead of slicing,
-/// so an offset inside a character can never panic.
-fn char_index(text: &str, byte: usize) -> usize {
-    let bytes = &text.as_bytes()[..byte.min(text.len())];
-    bytes.iter().filter(|b| (**b & 0xC0) != 0x80).count()
+/// Code-point index of each byte offset, in one pass over the text whatever
+/// the number of offsets. Counts lead bytes instead of slicing, so an offset
+/// inside a character or past the end can never panic.
+fn char_indexes(text: &str, offsets: &[usize]) -> Vec<usize> {
+    let bytes = text.as_bytes();
+    let mut order: Vec<usize> = (0..offsets.len()).collect();
+    order.sort_unstable_by_key(|&i| offsets[i]);
+    let mut out = vec![0; offsets.len()];
+    let (mut position, mut count) = (0, 0);
+    for i in order {
+        let target = offsets[i].min(bytes.len());
+        while position < target {
+            if bytes[position] & 0xC0 != 0x80 {
+                count += 1;
+            }
+            position += 1;
+        }
+        out[i] = count;
+    }
+    out
 }
 
 /// Inspects `text` with every built-in detector.
@@ -59,16 +74,21 @@ fn char_index(text: &str, byte: usize) -> usize {
 fn inspect(text: &str) -> Inspection {
     let found = voidgate_core::inspect(text);
     let redacted = voidgate_core::redact(text, &found.findings);
-    // shortcut: counts chars from the start for each offset (O(n·k)); fine for
-    // chat-sized text, upgrade to one forward pass if findings get large.
+    let offsets: Vec<usize> = found
+        .findings
+        .iter()
+        .flat_map(|f| [f.start, f.end])
+        .collect();
+    let indexes = char_indexes(text, &offsets);
     let findings = found
         .findings
         .iter()
-        .map(|f| Finding {
+        .enumerate()
+        .map(|(i, f)| Finding {
             code: f.code,
             detector: f.detector,
-            start: char_index(text, f.start),
-            end: char_index(text, f.end),
+            start: indexes[2 * i],
+            end: indexes[2 * i + 1],
         })
         .collect();
     Inspection {
@@ -96,7 +116,11 @@ fn _voidgate(m: &Bound<'_, PyModule>) -> PyResult<()> {
 
 #[cfg(test)]
 mod tests {
-    use super::char_index;
+    use super::char_indexes;
+
+    fn char_index(text: &str, byte: usize) -> usize {
+        char_indexes(text, &[byte])[0]
+    }
 
     #[test]
     fn byte_offsets_become_code_point_indexes() {
@@ -112,5 +136,13 @@ mod tests {
         let text = "ç";
         assert_eq!(char_index(text, 1), 1);
         assert_eq!(char_index(text, 99), 1);
+    }
+
+    #[test]
+    fn offsets_in_any_order_keep_their_place() {
+        let text = "ação 🔒 x";
+        let offsets = [text.len(), 0, "ação".len(), "ação".len(), 99];
+        assert_eq!(char_indexes(text, &offsets), vec![8, 0, 4, 4, 8]);
+        assert!(char_indexes(text, &[]).is_empty());
     }
 }

@@ -19,9 +19,11 @@ r.redacted  # "Meu CPF é [redacted]"
 | --- | --- | --- |
 | `content.prompt_injection` | `block` | Frase de manipulação (pt, en, es, fr, de, zh) e token de controle de modelo |
 | `content.invisible_unicode` | `block` | Caractere que a pessoa não vê (zero-width, bidi/Trojan Source, tags) |
-| `content.personal_data` | `mask` | E-mail, telefone E.164, cartão (Luhn), IBAN, CPF, CNPJ, SSN |
+| `content.personal_data` | `mask` | E-mail, telefone (E.164 e BR, ex. `(11) 98765-4321`), cartão (Luhn), IBAN, CPF, CNPJ, SSN |
 
 `block` ganha de `mask`. Só dado pessoal = `mask`. Nada = `allow`.
+
+Antes de comparar, o texto é normalizado: fullwidth (`Ｉｇｎｏｒｅ`), letra matemática (`𝐢𝐠𝐧𝐨𝐫𝐞`), homóglifo cirílico/grego, leetspeak (`1gn0r3`) e letra soletrada (`i.g.n.o.r.e`) viram a forma simples.
 
 ## Em agente
 
@@ -41,7 +43,8 @@ Exemplo completo, sem chave de API: [`examples/agente_simples.py`](examples/agen
 ## Detalhes
 
 - `Finding.start`/`end` são índice de caractere: `texto[f.start:f.end]` é o trecho. O finding nunca carrega o texto, então dá pra logar.
-- Sem limite de tamanho. Limite a entrada antes (o servidor do VoidGate usa 16 KiB por mensagem).
+- Sem limite de tamanho. Limite a entrada antes (o servidor do VoidGate usa 16 KiB por mensagem). O custo é linear: ~0,4 s por MB.
+- `str` com surrogate solto (texto Unicode malformado) levanta `UnicodeEncodeError`. Trate exceção como `block`.
 - A lista de frases é fechada, não é classificador. Atualizar regra = atualizar o pacote.
 - Wheel `abi3`: um por sistema, serve do Python 3.10 em diante.
 

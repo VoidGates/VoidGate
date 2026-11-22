@@ -1,0 +1,22 @@
+[package]
+name = "voidgate-py"
+description = "Python bindings for voidgate-core."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[lib]
+name = "_voidgate"
+crate-type = ["cdylib"]
+# The Python API is tested by pytest; cargo test only covers the offset helper.
+doctest = false
+
+[features]
+# Turned on by maturin only: linking without libpython breaks `cargo test`.
+extension-module = ["pyo3/extension-module"]
+
+[dependencies]
+voidgate-core = { path = "../../crates/voidgate-core" }
+pyo3 = { version = "0.30", features = ["abi3-py39"] }

@@ -5,12 +5,12 @@
 
 use super::{Detector, Finding};
 
-pub(crate) const REASON_CODE: &str = "content.personal_data";
+pub const REASON_CODE: &str = "content.personal_data";
 
 const DETECTOR_NAME: &str = "personal_data";
 const REDACTED: &str = "[redacted]";
 
-pub(crate) struct PersonalData;
+pub struct PersonalData;
 
 impl Detector for PersonalData {
     fn scan(&self, content: &str) -> Vec<Finding> {
@@ -40,7 +40,7 @@ impl Detector for PersonalData {
 }
 
 /// Replaces personal-data spans with `[redacted]`. Other findings are ignored.
-pub(crate) fn redact(content: &str, findings: &[Finding]) -> String {
+pub fn redact(content: &str, findings: &[Finding]) -> String {
     let mut spans: Vec<(usize, usize)> = findings
         .iter()
         .filter(|finding| finding.code == REASON_CODE)
@@ -431,7 +431,7 @@ fn iban_checksum(compact: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::{redact, PersonalData};
-    use crate::domain::detectors::{Detector, Finding};
+    use crate::detectors::{Detector, Finding};
 
     fn spans(text: &str) -> Vec<(usize, usize)> {
         PersonalData

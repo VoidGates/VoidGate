@@ -11,7 +11,8 @@ requisição → auth → handlers → services → domain
 | Mudança | Onde |
 | --- | --- |
 | Rota nova | `src/handlers/`, `src/services/`, os corpos em `src/models/` e a rota em `src/lib.rs`. Atualize `src/docs/openapi.json`. |
-| Regra de decisão | `src/domain/`. Um detector novo entra em `default_detectors()`. |
+| Regra de decisão | `crates/voidgate-core/`. Um detector novo entra em `default_detectors()` e vale pro servidor e pro pacote Python. Caminho de isca fica em `src/domain/policy.rs`. |
+| API do pacote Python | `bindings/python/`. Atualize o `__init__.pyi` junto. |
 | Erro novo | Uma variante em `src/error.rs`. |
 | Texto ou layout do site | `web/`. |
 | Comportamento que a API e o site prometem juntos | `tests/`. |
@@ -37,6 +38,17 @@ O título começa com o tipo, em minúsculas. Um `feat:` no meio da frase não c
 cargo fmt --all -- --check
 cargo clippy --locked --workspace --all-targets -- -D warnings
 cargo test --locked --workspace --all-targets
+```
+
+O `cargo test` compila o binding Python, então precisa de um Python 3.9+ instalado.
+
+Pacote Python, num venv:
+
+```text
+pip install maturin pytest
+maturin develop -m bindings/python/Cargo.toml
+pytest bindings/python/tests
+python bindings/python/examples/agente_simples.py
 ```
 
 Na pasta `web/`: `npm test`. Na pasta `tests/`: `powershell -File .\run.ps1`.

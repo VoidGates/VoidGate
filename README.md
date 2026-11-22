@@ -34,7 +34,22 @@ A API decide se uma mensagem de chat pode seguir, mascara dado pessoal ou bloque
 
 Cada pasta do repositório tem um `README.md` com o que ela cuida. O texto de uma pasta aparece quando essa pasta está aberta. A entrada do projeto é este arquivo.
 
-## Começar
+## Usar como biblioteca
+
+O motor roda dentro do seu processo, sem servidor. Bom pra agente: confira a mensagem do usuário, o resultado de cada ferramenta e a resposta do modelo.
+
+```python
+import voidgate
+
+r = voidgate.inspect(texto)
+if r.action == "block":
+    ...                      # não manda pro modelo
+texto_seguro = r.redacted    # dado pessoal vira [redacted]
+```
+
+Python: [`bindings/python`](bindings/python) (ainda não está no PyPI; build com `maturin`). Rust: [`crates/voidgate-core`](crates/voidgate-core).
+
+## Começar (servidor)
 
 Rust estável com Cargo. A chave `VOIDGATE_API_KEY` tem de 32 a 128 bytes, sem espaços nas pontas e sem caracteres de controle.
 
@@ -50,6 +65,8 @@ Preencha a chave no `.env` antes de subir. O processo escuta em `http://127.0.0.
 | Pasta | O que é |
 | --- | --- |
 | `src/` | API. A entrada HTTP fica em `handlers`, a regra em `services` e a decisão pura em `domain`. |
+| `crates/voidgate-core/` | Motor de decisão como biblioteca Rust, usado pela API e pelos bindings. |
+| `bindings/python/` | Pacote Python `voidgate`. |
 | `web/` | Site. A demonstração roda no navegador. |
 | `tests/` | Suíte da API pública e da demonstração. |
 | `docs/` | Documentação do produto e a referência da API. |

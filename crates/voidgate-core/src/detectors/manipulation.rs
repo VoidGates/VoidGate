@@ -5,7 +5,7 @@
 
 use super::{Detector, Finding};
 
-pub(crate) const REASON_CODE: &str = "content.prompt_injection";
+pub const REASON_CODE: &str = "content.prompt_injection";
 
 const DETECTOR_NAME: &str = "prompt_injection";
 const WINDOW: usize = 40;
@@ -148,7 +148,7 @@ const RAW: &[&str] = &[
     "पिछले निर्देशों को अनदेखा",
 ];
 
-pub(crate) struct PromptInjection;
+pub struct PromptInjection;
 
 impl Detector for PromptInjection {
     fn scan(&self, content: &str) -> Vec<Finding> {
@@ -324,7 +324,7 @@ fn merge(mut spans: Vec<(usize, usize)>) -> Vec<(usize, usize)> {
 #[cfg(test)]
 mod tests {
     use super::PromptInjection;
-    use crate::domain::detectors::Detector;
+    use crate::detectors::Detector;
 
     fn blocks(text: &str) -> bool {
         !PromptInjection.scan(text).is_empty()

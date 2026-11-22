@@ -1,14 +1,22 @@
 [workspace]
-members = ["tests"]
+members = ["crates/voidgate-core", "bindings/python", "tests"]
 resolver = "2"
+
+[workspace.package]
+version = "0.2.0"
+edition = "2021"
+license = "Apache-2.0"
+repository = "https://github.com/VoidGates/VoidGate"
 
 [package]
 name = "voidgate"
-version = "0.2.0"
-edition = "2021"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
 publish = false
 
 [dependencies]
+voidgate-core = { path = "crates/voidgate-core", features = ["serde"] }
 axum = "0.8"
 # Already in the tree through axum; named here to serve with timeouts.
 hyper = { version = "1", features = ["http1", "server"] }

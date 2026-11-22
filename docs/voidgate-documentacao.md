@@ -203,7 +203,7 @@ Exceções, porque entram na escrita normal. Todas exigem vizinhos visíveis do 
 | U+200E e U+200F | Ao lado de texto hebraico ou árabe |
 | U+FEFF (BOM) | É o primeiro caractere do texto |
 
-Os seletores de variação U+FE00–U+FE0F ficam de fora. U+FE0F faz parte de emoji comuns. Emoji e escritas são reconhecidos por faixas de código. Se um texto legítimo for bloqueado, a faixa correspondente entra em `src/domain/detectors/invisible_unicode.rs`.
+Os seletores de variação U+FE00–U+FE0F ficam de fora. U+FE0F faz parte de emoji comuns. Emoji e escritas são reconhecidos por faixas de código. Se um texto legítimo for bloqueado, a faixa correspondente entra em `crates/voidgate-core/src/detectors/invisible_unicode.rs`.
 
 <!-- página -->
 
@@ -302,17 +302,17 @@ requisição → auth → handlers → services → domain
 | --- | --- | --- | --- |
 | Apresentação | `handlers/` | Lê o HTTP, chama o service, devolve JSON | Regra de negócio |
 | Aplicação | `services/` | Valida a entrada e monta a resposta | HTTP e Axum |
-| Domínio | `domain/` | Decide caminho de isca e conteúdo | JSON, rotas e configuração |
+| Domínio | `domain/` + `voidgate-core` | Decide caminho de isca (`domain/`) e conteúdo (`crates/voidgate-core`) | JSON, rotas e configuração |
 
 Três peças atravessam as camadas. `models/` guarda os corpos, sem lógica. `error.rs` define `AppError`, o único formato de erro. `state.rs` guarda o `AppState`, lido na partida e só de leitura. Não há banco. O estado vive em memória.
 
 | Mudança | Onde entra |
 | --- | --- |
 | Rota nova | Handler, service, modelos e o roteador em `lib.rs` |
-| Detector novo | Só em `domain/`. Entra na lista `default_detectors()` |
+| Detector novo | Só em `crates/voidgate-core`. Entra na lista `default_detectors()` e vale pro servidor e pro pacote Python |
 | Erro novo | Uma variante de `AppError` |
 
-O caminho de isca está em `domain/policy.rs`. Cada detector implementa o trait `Detector`. O detector desta versão está em `domain/detectors/invisible_unicode.rs`.
+O caminho de isca está em `domain/policy.rs`. Os detectores ficam no crate `voidgate-core` (`crates/voidgate-core/src/detectors/`), cada um implementando o trait `Detector`. O mesmo crate é a biblioteca usada pelo pacote Python em `bindings/python`.
 
 A especificação OpenAPI é escrita à mão em `src/docs/openapi.json`. Um teste falha se uma rota atual sair do arquivo, ou se os códigos de erro da especificação e do código divergirem. Uma rota nova sem documentação não é detectada por esse teste. Quem cria rota atualiza o arquivo.
 
@@ -320,12 +320,12 @@ Verificação local:
 
 ```text
 cargo fmt --all -- --check
-cargo clippy --locked --all-targets -- -D warnings
-cargo test --locked --all-targets
+cargo clippy --locked --workspace --all-targets -- -D warnings
+cargo test --locked --workspace --all-targets
 cargo audit
 ```
 
-A integração contínua roda em Ubuntu formatação, Clippy, testes e auditoria de dependências. Em Windows roda os testes.
+A integração contínua roda em Ubuntu formatação, Clippy, testes e auditoria de dependências. Em Windows roda os testes. O job `python` gera o wheel e roda o pytest no Linux e no Windows.
 
 Mapa das pastas:
 
@@ -343,8 +343,11 @@ src/
 ├── handlers/        HTTP
 ├── services/        validação e resposta
 ├── models/          DTOs
-├── domain/          policy.rs e detectors/
+├── domain/          policy.rs; reexporta os detectores do core
 └── docs/            Swagger e openapi.json
+
+crates/voidgate-core/   motor de decisão, biblioteca Rust sem IO
+bindings/python/        pacote Python `voidgate` sobre o core
 ```
 
 <!-- página -->

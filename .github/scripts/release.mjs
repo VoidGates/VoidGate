@@ -49,12 +49,21 @@ function gh(args, env) {
   return execFileSync('gh', args, { encoding: 'utf8', env }).trim()
 }
 
+// Crates that take their version from [workspace.package] in Cargo.toml.
+export const WORKSPACE_CRATES = ['voidgate', 'voidgate-core', 'voidgate-py']
+
+export function bumpCargoLock(lock, from, version) {
+  return WORKSPACE_CRATES.reduce(
+    (text, name) => text.replace(`name = "${name}"\nversion = "${from}"`, `name = "${name}"\nversion = "${version}"`),
+    lock,
+  )
+}
+
 function writeVersion(version, from, notes) {
   const cargo = 'Cargo.toml'
   writeFileSync(cargo, readFileSync(cargo, 'utf8').replace(`version = "${from}"`, `version = "${version}"`))
   const cargoLock = 'Cargo.lock'
-  const cargoMarker = `name = "voidgate"\nversion = "${from}"`
-  writeFileSync(cargoLock, readFileSync(cargoLock, 'utf8').replace(cargoMarker, `name = "voidgate"\nversion = "${version}"`))
+  writeFileSync(cargoLock, bumpCargoLock(readFileSync(cargoLock, 'utf8'), from, version))
   const packageJson = 'web/package.json'
   writeFileSync(packageJson, readFileSync(packageJson, 'utf8').replace(`"version": "${from}"`, `"version": "${version}"`))
   const lock = 'web/package-lock.json'

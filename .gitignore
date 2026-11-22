@@ -3,3 +3,9 @@
 .env
 node_modules/
 /*.patch
+
+# Python (bindings/python)
+__pycache__/
+.venv/
+/dist/
+*.whl

@@ -1,0 +1,25 @@
+[build-system]
+requires = ["maturin>=1.16,<2"]
+build-backend = "maturin"
+
+[project]
+name = "voidgate"
+description = "Bloqueia manipulação de prompt e mascara dado pessoal antes de chegar no modelo de IA. Roda no processo, sem servidor."
+readme = "README.md"
+license = "Apache-2.0"
+requires-python = ">=3.10"
+dynamic = ["version"]
+keywords = ["llm", "ai", "agents", "prompt-injection", "guardrails", "lgpd", "pii"]
+classifiers = [
+    "Programming Language :: Rust",
+    "Programming Language :: Python :: Implementation :: CPython",
+    "Topic :: Security",
+]
+
+[project.urls]
+Repository = "https://github.com/VoidGates/VoidGate"
+
+[tool.maturin]
+python-source = "python"
+module-name = "voidgate._voidgate"
+features = ["extension-module"]

@@ -1,7 +1,7 @@
 use super::{Detector, Finding};
 
 /// Reason code reported for every hidden character.
-pub(crate) const REASON_CODE: &str = "content.invisible_unicode";
+pub const REASON_CODE: &str = "content.invisible_unicode";
 
 const DETECTOR_NAME: &str = "invisible_unicode";
 
@@ -11,7 +11,7 @@ const DETECTOR_NAME: &str = "invisible_unicode";
 ///
 /// Consecutive hidden characters are reported as one finding, so a hidden
 /// sentence is one span instead of one finding per character.
-pub(crate) struct InvisibleUnicode;
+pub struct InvisibleUnicode;
 
 impl Detector for InvisibleUnicode {
     fn scan(&self, content: &str) -> Vec<Finding> {

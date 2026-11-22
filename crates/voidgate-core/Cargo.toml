@@ -1,0 +1,15 @@
+[package]
+name = "voidgate-core"
+description = "Decides if a text sent to or from an AI model can go on, must be masked or must be blocked."
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+publish = false
+
+[features]
+# Serialize for Action and Finding, used by the HTTP server.
+serde = ["dep:serde"]
+
+[dependencies]
+serde = { version = "1", features = ["derive"], optional = true }

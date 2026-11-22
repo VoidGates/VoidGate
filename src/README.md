@@ -18,6 +18,6 @@ Cuida da decisão e, quando há um modelo configurado, do encaminhamento do chat
 | `error.rs` | O único formato de erro. |
 | `handlers/` | Entrada HTTP. |
 | `services/` | Regra de cada rota. |
-| `domain/` | Decisão pura. |
+| `domain/` | Decisão pura: caminho de isca aqui, conteúdo reexportado de `crates/voidgate-core`. |
 | `models/` | Corpos JSON. |
 | `docs/` | Swagger e OpenAPI, só em desenvolvimento. |

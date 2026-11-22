@@ -1,10 +1,9 @@
 //! Chat decision. `block` wins over `mask`. Personal data alone is `mask`.
 
+pub(crate) use voidgate_core::{action_of, scan as inspect, Verdict};
+
 use crate::{
-    domain::{
-        action::Action,
-        detectors::{personal_data, Detector, Finding},
-    },
+    domain::detectors::Detector,
     error::AppError,
     events::Direction,
     models::chat::{ChatDecisionRequest, ChatDecisionResponse, Role},
@@ -15,59 +14,6 @@ pub(crate) const MAX_CONTENT_BYTES: usize = 16 * 1024;
 
 /// Findings listed in one response; the decision still counts all of them.
 pub(crate) const MAX_FINDINGS: usize = 100;
-
-pub(crate) fn inspect(detectors: &[Box<dyn Detector>], content: &str) -> Vec<Finding> {
-    let mut findings: Vec<Finding> = detectors
-        .iter()
-        .flat_map(|detector| detector.scan(content))
-        .collect();
-    findings.sort_by_key(|finding| (finding.start, finding.end));
-    findings
-}
-
-/// `block` wins over `mask`. Any code other than personal data blocks.
-pub(crate) fn action_of(findings: &[Finding]) -> Action {
-    if findings
-        .iter()
-        .any(|finding| finding.code != personal_data::REASON_CODE)
-    {
-        Action::Block
-    } else if findings.is_empty() {
-        Action::Allow
-    } else {
-        Action::Mask
-    }
-}
-
-/// The outcome of a whole exchange: the most severe action seen
-/// (`block` > `mask` > `allow`) and the reason codes of every piece, each once.
-/// The proxy builds one per request and one per model reply.
-pub(crate) struct Verdict {
-    pub(crate) action: Action,
-    pub(crate) reason_codes: Vec<&'static str>,
-}
-
-impl Verdict {
-    pub(crate) fn allow() -> Self {
-        Self {
-            action: Action::Allow,
-            reason_codes: Vec::new(),
-        }
-    }
-
-    /// Folds in the findings of one more piece of text.
-    pub(crate) fn absorb(&mut self, findings: &[Finding]) {
-        let action = action_of(findings);
-        if action.severity() > self.action.severity() {
-            self.action = action;
-        }
-        for finding in findings {
-            if !self.reason_codes.contains(&finding.code) {
-                self.reason_codes.push(finding.code);
-            }
-        }
-    }
-}
 
 /// What the assistant says is `output`; what the user or the system sends is `input`.
 pub(crate) fn direction_of(role: &Role) -> Direction {

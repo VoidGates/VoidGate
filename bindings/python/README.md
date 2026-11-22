@@ -43,7 +43,7 @@ Exemplo completo, sem chave de API: [`examples/agente_simples.py`](examples/agen
 - `Finding.start`/`end` são índice de caractere: `texto[f.start:f.end]` é o trecho. O finding nunca carrega o texto, então dá pra logar.
 - Sem limite de tamanho. Limite a entrada antes (o servidor do VoidGate usa 16 KiB por mensagem).
 - A lista de frases é fechada, não é classificador. Atualizar regra = atualizar o pacote.
-- Wheel `abi3`: um por sistema, serve do Python 3.9 em diante.
+- Wheel `abi3`: um por sistema, serve do Python 3.10 em diante.
 
 ## Desenvolver
 

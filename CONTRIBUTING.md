@@ -40,7 +40,7 @@ cargo clippy --locked --workspace --all-targets -- -D warnings
 cargo test --locked --workspace --all-targets
 ```
 
-O `cargo test` compila o binding Python, então precisa de um Python 3.9+ instalado.
+O `cargo test` compila o binding Python, então precisa de um Python 3.10+ instalado.
 
 Pacote Python, num venv:
 

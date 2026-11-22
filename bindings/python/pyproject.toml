@@ -7,7 +7,7 @@ name = "voidgate"
 description = "Bloqueia manipulação de prompt e mascara dado pessoal antes de chegar no modelo de IA. Roda no processo, sem servidor."
 readme = "README.md"
 license = "Apache-2.0"
-requires-python = ">=3.9"
+requires-python = ">=3.10"
 dynamic = ["version"]
 keywords = ["llm", "ai", "agents", "prompt-injection", "guardrails", "lgpd", "pii"]
 classifiers = [

@@ -100,6 +100,7 @@ impl EventLog {
     }
 
     /// At most `limit` events of the window, oldest first.
+    #[cfg(test)]
     pub(crate) fn recent(&self, limit: usize) -> Result<Vec<Event>, AppError> {
         let inner = self.inner.lock().map_err(|_| AppError::Unavailable)?;
         Ok(recent_locked(&inner, now_ms()?, limit))
@@ -237,6 +238,7 @@ fn push_locked(
     }
 }
 
+#[cfg(test)]
 fn recent_locked(inner: &Inner, now: u64, limit: usize) -> Vec<Event> {
     // Expired events can still sit in memory when no one has written for a
     // while, so reading filters by the window too.

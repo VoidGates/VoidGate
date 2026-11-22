@@ -26,22 +26,26 @@ export function useEventFeed(paused: boolean): Feed {
     let connected = false
     let cursor: string | undefined
     let currentEvents: PanelEvent[] = []
-    let partial = false
+    // Events lost at this moment are older than it, so the warning expires with the window.
+    let lastLossAt = -Infinity
     const poll = async () => {
       try {
+        let behind = false
         for (let pageNumber = 0; pageNumber < 12; pageNumber += 1) {
           const page = await fetchEvents(cursor, controller.signal)
           if (controller.signal.aborted) return
           if (page.reset || cursor === undefined) currentEvents = []
-          if (page.gap || page.reset) partial = true
+          if (page.gap || page.reset) lastLossAt = Date.now()
           currentEvents.push(...page.events)
           cursor = page.nextCursor
           if (!page.hasMore) break
-          if (pageNumber === 11) partial = true
+          if (pageNumber === 11) behind = true
         }
-        currentEvents = currentEvents.filter((event) => event.timestamp >= Date.now() - HISTORY_WINDOW)
+        const now = Date.now()
+        currentEvents = currentEvents.filter((event) => event.timestamp >= now - HISTORY_WINDOW)
         connected = true
-        setLive({ events: [...currentEvents], now: Date.now(), stale: false, partial })
+        const partial = behind || lastLossAt >= now - HISTORY_WINDOW
+        setLive({ events: [...currentEvents], now, stale: false, partial })
       } catch {
         if (controller.signal.aborted) return
         // No answer on the first try: stay on the simulation and stop asking,

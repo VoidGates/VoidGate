@@ -463,4 +463,53 @@ mod tests {
         );
         assert_eq!(log.recent(10), Err(AppError::Unavailable));
     }
+
+    fn cursor_at(log: &EventLog, id: u64) -> String {
+        format!("{:016x}:{id}", log.stream_id)
+    }
+
+    #[test]
+    fn cursor_reports_a_gap_when_unread_events_expired() {
+        let log = EventLog::new();
+        // T0 is in 1970: out of the window when page() reads the real clock.
+        push(&log, T0, "allow");
+        push(&log, T0 + 1, "allow");
+        log.record(
+            Route::DecisionsChat,
+            Direction::Input,
+            Action::Block,
+            vec![],
+        )
+        .expect("record");
+
+        let behind = log.page(Some(&cursor_at(&log, 0))).expect("page");
+        assert!(behind.gap);
+        assert_eq!(ids(&behind.events), vec![3]);
+
+        let caught_up = log.page(Some(&cursor_at(&log, 2))).expect("page");
+        assert!(!caught_up.gap);
+    }
+
+    #[test]
+    fn cursor_reports_a_gap_when_the_cap_dropped_unread_events() {
+        let log = EventLog::new();
+        for _ in 0..MAX_EVENTS + 5 {
+            log.record(
+                Route::DecisionsChat,
+                Direction::Input,
+                Action::Allow,
+                vec![],
+            )
+            .expect("record");
+        }
+
+        let behind = log.page(Some(&cursor_at(&log, 3))).expect("page");
+        assert!(behind.gap);
+        assert!(behind.has_more);
+        assert_eq!(behind.events.first().map(|event| event.id), Some(6));
+
+        // 5 was the last dropped id: a reader that saw it lost nothing.
+        let caught_up = log.page(Some(&cursor_at(&log, 5))).expect("page");
+        assert!(!caught_up.gap);
+    }
 }

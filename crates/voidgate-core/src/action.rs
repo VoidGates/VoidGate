@@ -9,9 +9,11 @@
 pub enum Action {
     /// Nothing found: the text can go on as is.
     Allow,
-    /// Only personal data found: send [`crate::redact`]ed text instead.
+    /// At least one finding asks to hide its span and none asks to stop the
+    /// text: send [`crate::redact`]ed text instead. Built in: personal data.
     Mask,
-    /// Manipulation or hidden characters found: do not send the text.
+    /// At least one finding asks to stop the text: do not send it. Built in:
+    /// manipulation and hidden characters.
     Block,
 }
 

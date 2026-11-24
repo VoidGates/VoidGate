@@ -53,6 +53,8 @@ class Conversation:
     inspections: list[Inspection]
     _originals: Mapping[str, str] = field(default_factory=dict, repr=False, compare=False)
     _vault: Any = field(default=None, repr=False, compare=False)
+    # (role, original text) of every scanned text, for ToolPolicy. Never in repr.
+    _texts: tuple[tuple[str, str], ...] = field(default=(), repr=False, compare=False)
 
     def restore(self, text: str) -> str:
         """Puts back the values hidden by `numbered` placeholders in this conversation."""
@@ -107,14 +109,18 @@ class Guard:
         vault = _Vault()
         safe: list[dict[str, Any]] = []
         inspections: list[Inspection] = []
+        texts: list[tuple[str, str]] = []
+        role = ""
 
         def check(text: str) -> str:
+            texts.append((role, text))
             result = self._inspect(text, vault)
             inspections.append(result)
             return result.redacted
 
         for original in messages:
             message: dict[str, Any] = copy.deepcopy(dict(original))
+            role = str(message.get("role", ""))
             content = message.get("content")
             if isinstance(content, str):
                 message["content"] = check(content)
@@ -129,7 +135,7 @@ class Guard:
             safe.append(message)
 
         action: Action = max((i.action for i in inspections), key=_RANK.__getitem__, default="allow")
-        return Conversation(action, safe, inspections, vault.originals, vault)
+        return Conversation(action, safe, inspections, vault.originals, vault, tuple(texts))
 
     def _inspect(self, text: str, vault: _Vault) -> Inspection:
         findings = []

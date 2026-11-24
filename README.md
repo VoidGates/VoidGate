@@ -82,6 +82,17 @@ guard = voidgate.Guard(
 )
 ```
 
+### Control what an agent can do
+
+Detection can always be fooled by a new phrasing. A `ToolPolicy` does not depend on it: after the agent reads untrusted content (a web page, a tool result), sensitive tools such as `send_email` or `refund` only run with your approval, and tools you did not declare never run on their own.
+
+```python
+policy = voidgate.ToolPolicy(safe={"search_web"}, sensitive={"send_email", "refund"})
+client = voidgate.openai.protect(OpenAI(), policy=policy, approve=ask_a_human)
+```
+
+Tested against a real model: an injected instruction that the detector misses made the model call `send_email` to the attacker, and the policy refused the call. Demo: [`agente_ferramentas.py`](bindings/python/examples/agente_ferramentas.py).
+
 The full Python API is in [`bindings/python`](bindings/python). A complete agent example that runs without an API key: [`agente_simples.py`](bindings/python/examples/agente_simples.py).
 
 ## Two ways to use it
@@ -108,6 +119,8 @@ The same engine ([`voidgate-core`](crates/voidgate-core)) powers both.
 | **Reversible masking** | Yes (`restore`) | Yes (Vault) | Via anonymizer | — | — |
 
 VoidGate is the light option: no model to download and a few milliseconds per message, so it can sit on every call. Where a classifier matters more (paraphrased attacks, names and addresses), the tools above go further. They can also be combined with VoidGate.
+
+What VoidGate adds on top of detection is the `ToolPolicy`: a rule about which actions may follow untrusted content, enforced on the tool calls themselves. It holds even when every detector, VoidGate's included, misses the attack.
 
 ## What it detects
 

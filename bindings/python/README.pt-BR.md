@@ -12,7 +12,7 @@ Roda dentro do seu processo: sem servidor, sem chave de API, sem chamada de rede
 
 - [Instalação](#instalação)
 - [Início rápido](#início-rápido)
-- [Uso](#uso): textos avulsos, clientes OpenAI, outros provedores, políticas, máscara reversível, conversas e agentes, APIs web, logs
+- [Uso](#uso): textos avulsos, clientes OpenAI, outros provedores, políticas, máscara reversível, conversas e agentes, política de ferramentas, APIs web, logs
 - [O que detecta](#o-que-detecta)
 - [Referência da API](#referência-da-api)
 - [Limites](#limites)
@@ -197,7 +197,46 @@ def run_tool(name, args):
 
 Os argumentos de tool call também são conferidos, então um agente não passa o CPF de um cliente para uma API externa sem máscara. Um loop de agente completo, que roda sem chave de API: [`examples/agente_simples.py`](https://github.com/VoidGates/VoidGate/blob/main/bindings/python/examples/agente_simples.py).
 
-### 7. APIs web
+### 7. Política de ferramentas: uma barreira que não depende de detecção
+
+Qualquer detector pode ser enganado por uma frase nova. Uma `ToolPolicy` não tenta reconhecer o ataque. Ela decide pela **origem do texto** e pela **ferramenta chamada**, então continua valendo mesmo quando a injeção passa por todos os detectores:
+
+```python
+policy = voidgate.ToolPolicy(
+    safe={"search_web", "get_order"},      # read-only: always allowed
+    sensitive={"send_email", "refund"},    # side effects: need approval after untrusted content
+)
+
+def approve(call: voidgate.ToolCall) -> bool:
+    print(call.name, call.arguments, call.reasons)
+    return ask_a_human(call)               # your UI, a Slack button, a queue...
+
+client = voidgate.openai.protect(OpenAI(), policy=policy, approve=approve)
+```
+
+As regras, aplicadas em toda tool call que o modelo pede:
+
+1. Uma ferramenta **sensível** depois de conteúdo **não confiável** (por padrão, resultados de ferramenta) precisa de aprovação.
+2. Uma ferramenta **não declarada** na política sempre precisa de aprovação.
+3. Um argumento que **copia texto não confiável** (o e-mail do atacante que estava numa página web) é informado a quem aprova.
+
+Sem `approve`, ou quando ele não devolve exatamente `True`, a chamada levanta `voidgate.ToolBlocked` (subclasse de `Blocked`, com `.call`). O `approve` pode ser `async` com o `AsyncOpenAI`. Em chatbot público, trate também as mensagens do usuário como não confiáveis: `ToolPolicy(..., untrusted_roles={"tool", "user"})`.
+
+O modelo vê `[EMAIL_1]`, mas a sua ferramenta recebe o valor real: os placeholders nos argumentos da tool call voltam antes do seu código rodar.
+
+Para outros SDKs, use o mesmo motor diretamente:
+
+```python
+call = policy.check("send_email", {"to": "audit@evil.example"}, messages)
+call.allowed     # False
+call.reasons     # ["conversation contains untrusted content (tool)", ...]
+```
+
+O que isso garante, e o que não garante: nenhuma ferramenta sensível ou não declarada roda depois de conteúdo não confiável sem a sua aprovação, diga o que disser o texto injetado. A resposta em **texto** do modelo ainda pode ser influenciada, e as ferramentas marcadas como `safe` rodam livres, então mantenha-as só de leitura.
+
+Uma demonstração de ataque que roda (uma injeção que o detector não pega, barrada pela política): [`examples/agente_ferramentas.py`](https://github.com/VoidGates/VoidGate/blob/main/bindings/python/examples/agente_ferramentas.py).
+
+### 8. APIs web
 
 A checagem é uma chamada síncrona e rápida, então cabe em qualquer handler. Com FastAPI:
 
@@ -217,7 +256,7 @@ def chat(body: dict):
 
 A varredura libera o GIL do Python, então roda em paralelo entre threads e não segura as outras requisições.
 
-### 8. Logs e monitoramento
+### 9. Logs e monitoramento
 
 Os achados nunca contêm o texto, então podem ir direto para logs e métricas:
 
@@ -250,14 +289,17 @@ Antes da comparação, o texto é normalizado para que disfarces não passem: ca
 | `voidgate.inspect_messages(messages)` | `Conversation` |
 | `voidgate.redact(text)` | `str` com o dado pessoal trocado |
 | `voidgate.Guard(block=(), allow=(), placeholder="redacted")` | Uma política com os mesmos três métodos |
-| `voidgate.openai.protect(client, guard=None)` | O mesmo cliente, protegido no próprio objeto |
+| `voidgate.ToolPolicy(safe=(), sensitive=(), untrusted_roles={"tool"})` | Uma política de ferramentas; `.check(name, arguments, messages)` devolve um `ToolCall` |
+| `voidgate.openai.protect(client, guard=None, *, policy=None, approve=None)` | O mesmo cliente, protegido no próprio objeto |
 
 | Tipo | Campos |
 | --- | --- |
 | `Inspection` | `action`, `findings`, `redacted`, `restore(text)` |
 | `Conversation` | `action`, `messages` (cópia segura), `inspections`, `restore(text)` |
 | `Finding` | `code`, `detector`, `kind`, `start`, `end` (índices de caractere) |
+| `ToolCall` | `name`, `arguments`, `reasons`, `allowed` |
 | `Blocked` | Exceção; `.result` traz o `Inspection` ou o `Conversation` |
+| `ToolBlocked` | Subclasse de `Blocked`; `.call` traz o `ToolCall` recusado |
 
 Todos os tipos são dataclasses imutáveis. O pacote é totalmente tipado (`py.typed`, conferido com `mypy --strict`).
 

@@ -84,6 +84,17 @@ guard = voidgate.Guard(
 )
 ```
 
+### Controlar o que o agente pode fazer
+
+A detecção sempre pode ser enganada por uma frase nova. Uma `ToolPolicy` não depende dela: depois que o agente lê conteúdo não confiável (uma página web, um resultado de ferramenta), ferramentas sensíveis como `send_email` ou `refund` só rodam com a sua aprovação, e ferramentas que você não declarou nunca rodam sozinhas.
+
+```python
+policy = voidgate.ToolPolicy(safe={"search_web"}, sensitive={"send_email", "refund"})
+client = voidgate.openai.protect(OpenAI(), policy=policy, approve=ask_a_human)
+```
+
+Testado com um modelo real: uma instrução injetada que o detector não pega fez o modelo chamar `send_email` para o atacante, e a política recusou a chamada. Demonstração: [`agente_ferramentas.py`](bindings/python/examples/agente_ferramentas.py).
+
 A API Python completa está em [`bindings/python`](bindings/python/README.pt-BR.md). Exemplo completo de agente, que roda sem chave de API: [`agente_simples.py`](bindings/python/examples/agente_simples.py).
 
 ## Duas formas de usar
@@ -110,6 +121,8 @@ O mesmo motor ([`voidgate-core`](crates/voidgate-core)) atende os dois modos.
 | **Máscara reversível** | Sim (`restore`) | Sim (Vault) | Via anonymizer | — | — |
 
 O VoidGate é a opção leve: não baixa modelo e leva milissegundos por mensagem, então pode ficar em toda chamada. Onde um classificador importa mais (ataques parafraseados, nomes e endereços), as ferramentas acima vão mais longe. Elas também podem ser combinadas com o VoidGate.
+
+O que o VoidGate acrescenta à detecção é a `ToolPolicy`: uma regra sobre quais ações podem vir depois de conteúdo não confiável, aplicada nas próprias tool calls. Ela vale mesmo quando todos os detectores, inclusive o do VoidGate, deixam o ataque passar.
 
 ## O que detecta
 

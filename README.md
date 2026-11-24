@@ -47,7 +47,7 @@ Attacks are detected in six languages, and personal identifiers from several cou
 ## Quick start
 
 ```sh
-pip install "voidgate @ git+https://github.com/VoidGates/VoidGate@develop#subdirectory=bindings/python"
+pip install voidgate
 ```
 
 ```python
@@ -61,18 +61,28 @@ r.action     # "mask"
 r.redacted   # "Contact me at [redacted]"
 ```
 
-### In agents
-
-Check every tool result too. That is where indirect prompt injection comes in:
+### Guard an OpenAI client in one line
 
 ```python
-def call_tool(name, args):
-    output = tools[name](**args)
-    r = voidgate.inspect(output)
-    return "[blocked]" if r.action == "block" else r.redacted
+from openai import OpenAI
+import voidgate.openai
+
+client = voidgate.openai.protect(OpenAI())
 ```
 
-A complete example that runs without an API key: [`bindings/python/examples/agente_simples.py`](bindings/python/examples/agente_simples.py).
+Every `chat.completions.create` call now checks the whole conversation, including tool results and tool-call arguments. An injection raises `voidgate.Blocked` before the model is called. The model sees `[EMAIL_1]` instead of the e-mail, and the reply is checked too: data the model makes up stays hidden, and the caller's own values are put back. It works with `OpenAI`, `AsyncOpenAI` and any OpenAI-compatible server (Ollama, vLLM, Groq, OpenRouter).
+
+### Configure
+
+```python
+guard = voidgate.Guard(
+    block={"card", "iban"},        # block instead of mask
+    allow=["support@acme.com"],    # never flagged
+    placeholder="numbered",        # [EMAIL_1], reversible with .restore()
+)
+```
+
+The full Python API is in [`bindings/python`](bindings/python). A complete agent example that runs without an API key: [`agente_simples.py`](bindings/python/examples/agente_simples.py).
 
 ## Two ways to use it
 
@@ -85,6 +95,19 @@ The same engine ([`voidgate-core`](crates/voidgate-core)) powers both.
 | **Availability** | There is no server to go down | Your gateway must fail closed |
 | **Best for** | Agents and apps in Python or Rust | Central enforcement, any language, OpenAI-style proxy |
 | **Extras** | — | API key, rate limit, metrics, decision events |
+
+## How it compares
+
+| | VoidGate | [LLM Guard](https://github.com/protectai/llm-guard) | [Presidio](https://microsoft.github.io/presidio/) | [NeMo Guardrails](https://developer.nvidia.com/nemo-guardrails) | [Lakera Guard](https://www.lakera.ai/) |
+| --- | --- | --- | --- | --- | --- |
+| **Form** | Library (Rust core) + HTTP server | Python library | PII SDK | Guardrail orchestration toolkit | Hosted API |
+| **Runs offline** | Yes | Yes | Yes | Depends on the rails | No |
+| **Model download** | None | Transformer models | NLP models | LLM calls | — |
+| **Prompt injection** | Pattern list in 6 languages, normalized against disguise | Fine-tuned classifier | — | Configurable rails | Hosted classifiers |
+| **Personal data** | Checksum-validated IDs (card, IBAN, CPF, CNPJ), e-mail, phone | Via Presidio | Broad, including names and addresses | Via integrations | Yes |
+| **Reversible masking** | Yes (`restore`) | Yes (Vault) | Via anonymizer | — | — |
+
+VoidGate is the light option: no model to download and a few milliseconds per message, so it can sit on every call. Where a classifier matters more (paraphrased attacks, names and addresses), the tools above go further. They can also be combined with VoidGate.
 
 ## What it detects
 
@@ -108,11 +131,15 @@ Before matching, text is normalized: fullwidth characters (`Ｉｇｎｏｒｅ`)
 
 ## Installation
 
-Packages are not yet published on PyPI or crates.io. Until then, install from the repository.
-
 ### Python
 
-Requires Python 3.10+ and [stable Rust](https://rustup.rs), because the package is compiled on install.
+Requires Python 3.10+. Prebuilt wheels for Linux (x86-64, ARM64), macOS and Windows; no Rust needed.
+
+```sh
+pip install voidgate
+```
+
+The latest unreleased code, which compiles on install and needs [stable Rust](https://rustup.rs):
 
 ```sh
 pip install "voidgate @ git+https://github.com/VoidGates/VoidGate@develop#subdirectory=bindings/python"

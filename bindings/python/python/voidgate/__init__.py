@@ -1,13 +1,38 @@
-"""VoidGate: bloqueia manipulação de prompt e mascara dado pessoal antes do modelo de IA.
+"""VoidGate: blocks prompt injection and masks personal data before it reaches an AI model.
 
     import voidgate
 
-    r = voidgate.inspect(texto)
+    r = voidgate.inspect(text)
     if r.action == "block":
-        ...                      # não mande pro modelo
-    texto_seguro = r.redacted    # dado pessoal trocado por [redacted]
+        ...                      # do not send it to the model
+    safe = r.redacted            # personal data replaced
+
+Configure with `voidgate.Guard(block=..., allow=..., placeholder=...)`.
+Guard an OpenAI-style client in one line with `voidgate.openai.protect(client)`.
 """
 
-from ._voidgate import Finding, Inspection, __version__, inspect, redact
+from ._guard import (
+    PII_KINDS,
+    Blocked,
+    Conversation,
+    Finding,
+    Guard,
+    Inspection,
+    inspect,
+    inspect_messages,
+    redact,
+)
+from ._voidgate import __version__
 
-__all__ = ["Finding", "Inspection", "__version__", "inspect", "redact"]
+__all__ = [
+    "PII_KINDS",
+    "Blocked",
+    "Conversation",
+    "Finding",
+    "Guard",
+    "Inspection",
+    "__version__",
+    "inspect",
+    "inspect_messages",
+    "redact",
+]

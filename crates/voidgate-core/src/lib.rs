@@ -17,6 +17,41 @@
 //! assert_eq!(redact(text, &found.findings), "Meu CPF é [redacted]");
 //! ```
 //!
+//! A detector of your own says what it wants done through the `action` of each
+//! finding: `Mask` hides the span, `Block` stops the text. Here one masks an
+//! internal project name:
+//!
+//! ```
+//! use voidgate_core::{inspect_with, redact, Action, Detector, Finding};
+//!
+//! struct CodeName;
+//!
+//! impl Detector for CodeName {
+//!     fn scan(&self, content: &str) -> Vec<Finding> {
+//!         content
+//!             .match_indices("projeto-aurora")
+//!             .map(|(start, found)| Finding {
+//!                 code: "custom.codename",
+//!                 detector: "codename",
+//!                 kind: "codename",
+//!                 action: Action::Mask,
+//!                 start,
+//!                 end: start + found.len(),
+//!             })
+//!             .collect()
+//!     }
+//! }
+//!
+//! let detectors: Vec<Box<dyn Detector>> = vec![Box::new(CodeName)];
+//! let text = "Novidade do projeto-aurora na sexta";
+//! let found = inspect_with(&detectors, text);
+//! assert_eq!(found.action, Action::Mask);
+//! assert_eq!(
+//!     redact(text, &found.findings),
+//!     "Novidade do [redacted] na sexta"
+//! );
+//! ```
+//!
 //! There is no size limit here: bound the input before calling, as the
 //! VoidGate server does (16 KiB per message).
 
@@ -59,18 +94,16 @@ pub fn scan(detectors: &[Box<dyn Detector>], content: &str) -> Vec<Finding> {
     findings
 }
 
-/// `Block` wins over `Mask`. Any code other than personal data blocks.
+/// The most severe action any finding asks for (`Block` over `Mask` over
+/// `Allow`), or `Allow` when there are no findings. It reads what each
+/// detector declared, never the reason code, so a detector of your own can
+/// mask or block.
 pub fn action_of(findings: &[Finding]) -> Action {
-    if findings
+    findings
         .iter()
-        .any(|finding| finding.code != detectors::personal_data::REASON_CODE)
-    {
-        Action::Block
-    } else if findings.is_empty() {
-        Action::Allow
-    } else {
-        Action::Mask
-    }
+        .map(|finding| finding.action)
+        .max()
+        .unwrap_or(Action::Allow)
 }
 
 /// The outcome of a whole exchange (several messages, or a message and the
@@ -102,7 +135,10 @@ impl Verdict {
 
 #[cfg(test)]
 mod tests {
-    use super::{inspect, redact, Action, Verdict};
+    use super::{
+        action_of, default_detectors, inspect, inspect_with, redact, Action, Detector, Finding,
+        Verdict,
+    };
 
     const CPF: &str = "529.982.247-25";
 
@@ -146,6 +182,120 @@ mod tests {
             [Action::Allow, Action::Mask, Action::Block].map(Action::as_str),
             ["allow", "mask", "block"]
         );
+    }
+
+    /// A detector from outside the crate: finds a fixed word and declares
+    /// whatever action it was built with.
+    struct Word {
+        needle: &'static str,
+        code: &'static str,
+        action: Action,
+    }
+
+    impl Detector for Word {
+        fn scan(&self, content: &str) -> Vec<Finding> {
+            content
+                .match_indices(self.needle)
+                .map(|(start, found)| Finding {
+                    code: self.code,
+                    detector: "test_word",
+                    kind: "test_word",
+                    action: self.action,
+                    start,
+                    end: start + found.len(),
+                })
+                .collect()
+        }
+    }
+
+    const CODENAME: &str = "projeto-aurora";
+    const SECRET_PLAN: &str = "projeto-vulcano";
+
+    fn masking() -> Box<dyn Detector> {
+        Box::new(Word {
+            needle: CODENAME,
+            code: "custom.codename",
+            action: Action::Mask,
+        })
+    }
+
+    fn blocking() -> Box<dyn Detector> {
+        Box::new(Word {
+            needle: SECRET_PLAN,
+            code: "custom.secret_plan",
+            action: Action::Block,
+        })
+    }
+
+    fn finding(code: &'static str, action: Action, start: usize, end: usize) -> Finding {
+        Finding {
+            code,
+            detector: "test_word",
+            kind: "test_word",
+            action,
+            start,
+            end,
+        }
+    }
+
+    #[test]
+    fn no_findings_allow_and_the_most_severe_action_wins() {
+        assert_eq!(action_of(&[]), Action::Allow);
+        let mask = finding("a", Action::Mask, 0, 1);
+        let block = finding("b", Action::Block, 1, 2);
+        let allow = finding("c", Action::Allow, 2, 3);
+        assert_eq!(action_of(std::slice::from_ref(&allow)), Action::Allow);
+        assert_eq!(action_of(&[allow.clone(), mask.clone()]), Action::Mask);
+        assert_eq!(
+            action_of(&[mask.clone(), block.clone(), allow]),
+            Action::Block
+        );
+        assert_eq!(action_of(&[block, mask]), Action::Block);
+    }
+
+    #[test]
+    fn a_detector_of_your_own_can_mask() {
+        let text = format!("Soon: {CODENAME}, do not tell.");
+        let found = inspect_with(&[masking()], &text);
+        assert_eq!(found.action, Action::Mask);
+        assert_eq!(found.findings[0].code, "custom.codename");
+        assert_eq!(
+            redact(&text, &found.findings),
+            "Soon: [redacted], do not tell."
+        );
+    }
+
+    #[test]
+    fn a_detector_of_your_own_can_block_and_redact_leaves_the_text() {
+        let text = format!("About {SECRET_PLAN}.");
+        let found = inspect_with(&[blocking()], &text);
+        assert_eq!(found.action, Action::Block);
+        assert_eq!(redact(&text, &found.findings), text);
+    }
+
+    #[test]
+    fn mixed_findings_block_but_redact_still_hides_every_mask() {
+        let text = format!("{CODENAME}, {SECRET_PLAN} e CPF {CPF}");
+        let mut detectors = default_detectors();
+        detectors.push(masking());
+        detectors.push(blocking());
+        let found = inspect_with(&detectors, &text);
+        assert_eq!(found.action, Action::Block);
+        // The custom mask and the built-in CPF are hidden; the blocked span is not.
+        assert_eq!(
+            redact(&text, &found.findings),
+            format!("[redacted], {SECRET_PLAN} e CPF [redacted]")
+        );
+    }
+
+    #[test]
+    fn redact_follows_the_action_and_not_the_reason_code() {
+        let text = "abcdef";
+        let findings = [
+            finding("content.personal_data", Action::Block, 0, 2),
+            finding("custom.anything", Action::Mask, 3, 5),
+        ];
+        assert_eq!(redact(text, &findings), "abc[redacted]f");
     }
 
     #[test]

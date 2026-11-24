@@ -8,6 +8,8 @@ pub mod invisible_unicode;
 pub mod manipulation;
 pub mod personal_data;
 
+use crate::action::Action;
+
 pub use invisible_unicode::InvisibleUnicode;
 pub use manipulation::PromptInjection;
 pub use personal_data::PersonalData;
@@ -27,6 +29,11 @@ pub struct Finding {
     /// Left out of the server JSON so its contract does not change.
     #[cfg_attr(feature = "serde", serde(skip))]
     pub kind: &'static str,
+    /// What this finding asks for: `Mask` hides the span, `Block` stops the
+    /// text. The decision of a text is the most severe action of its findings.
+    /// Left out of the server JSON so its contract does not change.
+    #[cfg_attr(feature = "serde", serde(skip))]
+    pub action: Action,
     pub start: usize,
     pub end: usize,
 }

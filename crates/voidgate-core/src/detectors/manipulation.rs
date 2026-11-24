@@ -4,6 +4,7 @@
 //! tokens, not a classifier. Add a language when a real message slips through.
 
 use super::{Detector, Finding};
+use crate::action::Action;
 
 pub const REASON_CODE: &str = "content.prompt_injection";
 
@@ -200,6 +201,7 @@ impl Detector for PromptInjection {
                     code: REASON_CODE,
                     detector: DETECTOR_NAME,
                     kind: DETECTOR_NAME,
+                    action: Action::Block,
                     start,
                     end,
                 }

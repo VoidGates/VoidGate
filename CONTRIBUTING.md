@@ -11,7 +11,7 @@ requisição → auth → handlers → services → domain
 | Mudança | Onde |
 | --- | --- |
 | Rota nova | `src/handlers/`, `src/services/`, os corpos em `src/models/` e a rota em `src/lib.rs`. Atualize `src/docs/openapi.json`. |
-| Regra de decisão | `crates/voidgate-core/`. Um detector novo entra em `default_detectors()` e vale pro servidor e pro pacote Python. Caminho de isca fica em `src/domain/policy.rs`. |
+| Regra de decisão | `crates/voidgate-core/`. Um detector novo entra em `default_detectors()` e vale pro servidor e pro pacote Python. Cada `Finding` declara a própria `action` (`Mask` esconde o trecho, `Block` barra o texto); a decisão é a pior entre os achados. Caminho de isca fica em `src/domain/policy.rs`. |
 | API do pacote Python | `bindings/python/`. Atualize o `__init__.pyi` junto. |
 | Erro novo | Uma variante em `src/error.rs`. |
 | Texto ou layout do site | `web/`. |

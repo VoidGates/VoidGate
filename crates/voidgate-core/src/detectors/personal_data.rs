@@ -4,6 +4,7 @@
 //! `iban_len`, Brazilian CPF/CNPJ and US SSN. Add a country when a pilot needs it.
 
 use super::{Detector, Finding};
+use crate::action::Action;
 
 pub const REASON_CODE: &str = "content.personal_data";
 
@@ -30,6 +31,7 @@ impl Detector for PersonalData {
                     code: REASON_CODE,
                     detector: DETECTOR_NAME,
                     kind,
+                    action: Action::Mask,
                     start: index,
                     end,
                 });
@@ -42,11 +44,12 @@ impl Detector for PersonalData {
     }
 }
 
-/// Replaces personal-data spans with `[redacted]`. Other findings are ignored.
+/// Replaces the span of every finding whose action is `Mask` with
+/// `[redacted]`, whichever detector reported it. Other findings are ignored.
 pub fn redact(content: &str, findings: &[Finding]) -> String {
     let mut spans: Vec<(usize, usize)> = findings
         .iter()
-        .filter(|finding| finding.code == REASON_CODE)
+        .filter(|finding| finding.action == Action::Mask)
         .map(|finding| (finding.start, finding.end))
         .filter(|(start, end)| {
             *start <= *end

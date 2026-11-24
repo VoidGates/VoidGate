@@ -199,6 +199,7 @@ impl Detector for PromptInjection {
                 Finding {
                     code: REASON_CODE,
                     detector: DETECTOR_NAME,
+                    kind: DETECTOR_NAME,
                     start,
                     end,
                 }

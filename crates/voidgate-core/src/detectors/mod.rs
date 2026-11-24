@@ -22,6 +22,11 @@ pub use personal_data::PersonalData;
 pub struct Finding {
     pub code: &'static str,
     pub detector: &'static str,
+    /// What was found: `prompt_injection`, `invisible_unicode`, or for
+    /// personal data `email`, `phone`, `card`, `iban`, `cpf`, `cnpj`, `ssn`.
+    /// Left out of the server JSON so its contract does not change.
+    #[cfg_attr(feature = "serde", serde(skip))]
+    pub kind: &'static str,
     pub start: usize,
     pub end: usize,
 }

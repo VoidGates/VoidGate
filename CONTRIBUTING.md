@@ -54,3 +54,13 @@ python bindings/python/examples/agente_simples.py
 Na pasta `web/`: `npm test`. Na pasta `tests/`: `powershell -File .\run.ps1`.
 
 O `.env` fica de fora do commit. A chave de exemplo em `.env.example` permanece vazia.
+
+## Publicar no PyPI
+
+O release cria a tag `vX.Y.Z` na `main`. A publicação do pacote Python é manual:
+
+1. Actions → **PyPI** → *Run workflow*, escolha a tag e `target: testpypi`.
+2. Confira num venv limpo: `pip install -i https://test.pypi.org/simple/ voidgate==X.Y.Z`.
+3. Rode de novo com `target: pypi`.
+
+Não há token: o PyPI confia no workflow `pypi.yml` e no environment de mesmo nome (`testpypi` ou `pypi`), cadastrados como *trusted publisher*. Versão publicada não pode ser republicada; para retirar, use *yank*.

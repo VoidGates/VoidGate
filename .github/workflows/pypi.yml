@@ -1,0 +1,94 @@
+name: PyPI
+
+# Builds the `voidgate` wheels for every platform and, when run by hand,
+# publishes them. Release tags are pushed by the release job with
+# GITHUB_TOKEN, which never triggers other workflows, so publishing is a
+# manual run: Actions > PyPI > Run workflow, pick the tag and the target.
+# Pushes to develop that touch the package only build, to catch a broken
+# wheel before release day.
+on:
+  workflow_dispatch:
+    inputs:
+      target:
+        description: "Where to publish (none = build only)"
+        type: choice
+        options: [none, testpypi, pypi]
+        default: none
+  push:
+    branches: [develop]
+    paths:
+      - "bindings/python/**"
+      - "crates/voidgate-core/**"
+      - "Cargo.lock"
+      - ".github/workflows/pypi.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  wheels:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - { os: ubuntu-latest, target: x86_64 }
+          - { os: ubuntu-latest, target: aarch64 }
+          - { os: macos-latest, target: universal2-apple-darwin }
+          - { os: windows-latest, target: x64 }
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - uses: PyO3/maturin-action@v1
+        with:
+          maturin-version: "1.16.0"
+          working-directory: bindings/python
+          target: ${{ matrix.target }}
+          manylinux: auto
+          args: --release --locked --out dist
+      # The aarch64 wheel is cross-built and cannot run on this runner.
+      - if: matrix.target != 'aarch64'
+        shell: bash
+        run: |
+          python -m pip install pytest==9.2.0
+          python -m pip install --no-index --find-links bindings/python/dist voidgate
+          python -m pytest bindings/python/tests
+      - uses: actions/upload-artifact@v4
+        with:
+          name: wheel-${{ matrix.os }}-${{ matrix.target }}
+          path: bindings/python/dist
+
+  sdist:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: PyO3/maturin-action@v1
+        with:
+          maturin-version: "1.16.0"
+          working-directory: bindings/python
+          command: sdist
+          args: --out dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: sdist
+          path: bindings/python/dist
+
+  publish:
+    if: github.event_name == 'workflow_dispatch' && inputs.target != 'none'
+    needs: [wheels, sdist]
+    runs-on: ubuntu-latest
+    # Trusted Publishing: PyPI trusts this workflow + environment, no token stored.
+    environment: ${{ inputs.target }}
+    permissions:
+      id-token: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: dist
+          merge-multiple: true
+      - run: ls -l dist
+      - uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          repository-url: ${{ inputs.target == 'testpypi' && 'https://test.pypi.org/legacy/' || 'https://upload.pypi.org/legacy/' }}

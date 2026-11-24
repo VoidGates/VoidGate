@@ -22,6 +22,7 @@ from ._guard import (
     inspect_messages,
     redact,
 )
+from ._policy import ToolBlocked, ToolCall, ToolPolicy
 from ._voidgate import __version__
 
 __all__ = [
@@ -31,6 +32,9 @@ __all__ = [
     "Finding",
     "Guard",
     "Inspection",
+    "ToolBlocked",
+    "ToolCall",
+    "ToolPolicy",
     "__version__",
     "inspect",
     "inspect_messages",

@@ -2,6 +2,9 @@
 
 A versão do VoidGate é uma só para a API e para o site. A tag `v0.1.0` marca a primeira versão. Daqui em diante, um commit `feat:` na `main` sobe o minor, um `fix:` sobe o patch, e `feat!:`, `fix!:` ou `BREAKING CHANGE` sobe o major. O resto não gera versão.
 
+## [0.3.1] - 2026-11-24
+
+- fix(python): pacote leva LICENSE e página do PyPI em inglês
 ## [0.3.0] - 2026-11-22
 
 - fix(python): offsets em uma passada só

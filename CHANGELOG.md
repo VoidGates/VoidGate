@@ -2,6 +2,24 @@
 
 A versão do VoidGate é uma só para a API e para o site. A tag `v0.1.0` marca a primeira versão. Daqui em diante, um commit `feat:` na `main` sobe o minor, um `fix:` sobe o patch, e `feat!:`, `fix!:` ou `BREAKING CHANGE` sobe o major. O resto não gera versão.
 
+## [0.3.0] - 2026-11-22
+
+- fix(python): offsets em uma passada só
+- feat(core): mascara telefone brasileiro
+- fix(core): disfarce visual não fura mais a lista de injeção
+- fix(ci): mínimo Python 3.10 (3.9 é EOL e some do runner)
+- feat: voidgate-core como biblioteca e pacote Python
+- fix(dashboard): aviso de dados incompletos expira com a janela (#10)
+- fix(deps): bump url 2.5.8 -> 2.5.9 (RUSTSEC-2026-0592)
+- fix(dashboard): reject malformed event pages
+- fix(events): keep test-only snapshot helpers out of release
+- feat(events): add typed actions and incremental event feed
+- feat(web): adapt panel screens to metadata-only real events
+- feat(web): read real decision events from the API in the panel
+- feat(events): add GET /v1/events with metadata-only decision events
+- feat(events): record proxy decisions as one input and one output event
+- feat(events): record chat decisions and count record failures
+- feat(events): add in-memory decision event log
 ## [0.2.0] - 2026-11-21
 
 - feat(web): add event list, filters and plain-language detail to the panel

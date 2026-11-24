@@ -1,4 +1,5 @@
 use super::{Detector, Finding};
+use crate::action::Action;
 
 /// Reason code reported for every hidden character.
 pub const REASON_CODE: &str = "content.invisible_unicode";
@@ -28,6 +29,7 @@ impl Detector for InvisibleUnicode {
                         code: REASON_CODE,
                         detector: DETECTOR_NAME,
                         kind: DETECTOR_NAME,
+                        action: Action::Block,
                         start,
                         end,
                     }),
@@ -124,13 +126,14 @@ fn is_arabic(character: char) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{Detector, Finding, InvisibleUnicode, DETECTOR_NAME, REASON_CODE};
+    use super::{Action, Detector, Finding, InvisibleUnicode, DETECTOR_NAME, REASON_CODE};
 
     fn finding(start: usize, end: usize) -> Finding {
         Finding {
             code: REASON_CODE,
             detector: DETECTOR_NAME,
             kind: DETECTOR_NAME,
+            action: Action::Block,
             start,
             end,
         }

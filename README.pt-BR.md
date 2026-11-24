@@ -49,7 +49,7 @@ Ataques são detectados em seis idiomas, e identificadores pessoais de vários p
 ## Início rápido
 
 ```sh
-pip install "voidgate @ git+https://github.com/VoidGates/VoidGate@develop#subdirectory=bindings/python"
+pip install voidgate
 ```
 
 ```python
@@ -63,18 +63,28 @@ r.action     # "mask"
 r.redacted   # "Meu CPF é [redacted]"
 ```
 
-### Em agentes
-
-Confira também o resultado de cada ferramenta. É por ali que chega a injeção indireta:
+### Proteger um cliente OpenAI em uma linha
 
 ```python
-def chamar_ferramenta(nome, args):
-    saida = ferramentas[nome](**args)
-    r = voidgate.inspect(saida)
-    return "[bloqueado]" if r.action == "block" else r.redacted
+from openai import OpenAI
+import voidgate.openai
+
+client = voidgate.openai.protect(OpenAI())
 ```
 
-Exemplo completo, que roda sem chave de API: [`bindings/python/examples/agente_simples.py`](bindings/python/examples/agente_simples.py).
+A partir daí, toda chamada a `chat.completions.create` confere a conversa inteira, inclusive resultados de ferramenta e argumentos de tool call. Uma injeção levanta `voidgate.Blocked` antes de chamar o modelo. O modelo vê `[EMAIL_1]` no lugar do e-mail, e a resposta também é conferida: dado que o modelo inventa continua escondido, e os valores do próprio usuário voltam. Funciona com `OpenAI`, `AsyncOpenAI` e qualquer servidor compatível (Ollama, vLLM, Groq, OpenRouter).
+
+### Configurar
+
+```python
+guard = voidgate.Guard(
+    block={"card", "iban"},        # bloqueia em vez de mascarar
+    allow=["suporte@acme.com"],    # nunca marcado
+    placeholder="numbered",        # [EMAIL_1], reversível com .restore()
+)
+```
+
+A API Python completa está em [`bindings/python`](bindings/python/README.pt-BR.md). Exemplo completo de agente, que roda sem chave de API: [`agente_simples.py`](bindings/python/examples/agente_simples.py).
 
 ## Duas formas de usar
 
@@ -87,6 +97,19 @@ O mesmo motor ([`voidgate-core`](crates/voidgate-core)) atende os dois modos.
 | **Disponibilidade** | Não há servidor para cair | O seu gateway deve falhar fechado |
 | **Indicado para** | Agentes e aplicações em Python ou Rust | Proteção central, qualquer linguagem, proxy no formato OpenAI |
 | **Recursos extras** | — | Chave de API, rate limit, métricas, eventos de decisão |
+
+## Comparação
+
+| | VoidGate | [LLM Guard](https://github.com/protectai/llm-guard) | [Presidio](https://microsoft.github.io/presidio/) | [NeMo Guardrails](https://developer.nvidia.com/nemo-guardrails) | [Lakera Guard](https://www.lakera.ai/) |
+| --- | --- | --- | --- | --- | --- |
+| **Formato** | Biblioteca (núcleo Rust) + servidor HTTP | Biblioteca Python | SDK de dado pessoal | Kit de orquestração de guardrails | API hospedada |
+| **Funciona offline** | Sim | Sim | Sim | Depende dos rails | Não |
+| **Baixa modelo** | Não | Modelos transformer | Modelos de NLP | Chamadas a LLM | — |
+| **Injeção de prompt** | Lista de padrões em 6 idiomas, normalizada contra disfarce | Classificador treinado | — | Rails configuráveis | Classificadores hospedados |
+| **Dado pessoal** | Documentos com dígito verificador (cartão, IBAN, CPF, CNPJ), e-mail, telefone | Via Presidio | Amplo, inclusive nomes e endereços | Via integrações | Sim |
+| **Máscara reversível** | Sim (`restore`) | Sim (Vault) | Via anonymizer | — | — |
+
+O VoidGate é a opção leve: não baixa modelo e leva milissegundos por mensagem, então pode ficar em toda chamada. Onde um classificador importa mais (ataques parafraseados, nomes e endereços), as ferramentas acima vão mais longe. Elas também podem ser combinadas com o VoidGate.
 
 ## O que detecta
 
@@ -110,11 +133,15 @@ Antes da comparação, o texto é normalizado: caracteres fullwidth (`Ｉｇｎ�
 
 ## Instalação
 
-Os pacotes ainda não estão publicados no PyPI nem no crates.io. Por enquanto, instale a partir do repositório.
-
 ### Python
 
-Requer Python 3.10+ e [Rust estável](https://rustup.rs), porque o pacote é compilado na instalação.
+Requer Python 3.10+. Há wheels prontos para Linux (x86-64, ARM64), macOS e Windows; não precisa de Rust.
+
+```sh
+pip install voidgate
+```
+
+O código mais recente, ainda não lançado, compila na instalação e precisa de [Rust estável](https://rustup.rs):
 
 ```sh
 pip install "voidgate @ git+https://github.com/VoidGates/VoidGate@develop#subdirectory=bindings/python"

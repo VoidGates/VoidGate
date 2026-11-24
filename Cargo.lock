@@ -1219,7 +1219,7 @@ checksum = "0b928f33d975fc6ad9f86c8f283853ad26bdd5b10b7f1542aa2fa15e2289105a"
 
 [[package]]
 name = "voidgate"
-version = "0.3.1"
+version = "0.4.0"
 dependencies = [
  "axum",
  "hyper",
@@ -1236,14 +1236,14 @@ dependencies = [
 
 [[package]]
 name = "voidgate-core"
-version = "0.3.1"
+version = "0.4.0"
 dependencies = [
  "serde",
 ]
 
 [[package]]
 name = "voidgate-py"
-version = "0.3.1"
+version = "0.4.0"
 dependencies = [
  "pyo3",
  "voidgate-core",

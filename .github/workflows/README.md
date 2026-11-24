@@ -7,3 +7,4 @@
 | `deploy-pages.yml` | Publica `web/` no GitHub Pages. |
 | `pr-guard.yml` | Lê o diff do pull request com o script de `scripts/`. O código do pull request não é executado. |
 | `release.yml` | Na `main`, sobe a versão quando o commit começa com `feat:` ou `fix:`. |
+| `pypi.yml` | Gera os wheels do pacote Python (Linux x86-64/ARM64, macOS universal, Windows x64) e o sdist. Push na `develop` só gera. Rodado à mão, publica no TestPyPI ou no PyPI por Trusted Publishing, sem token. |

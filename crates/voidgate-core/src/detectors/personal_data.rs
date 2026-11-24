@@ -18,16 +18,18 @@ impl Detector for PersonalData {
         let mut findings = Vec::new();
         let mut index = 0;
         while index < bytes.len() {
-            let end = try_phone(bytes, index)
-                .or_else(|| try_iban(bytes, index))
-                .or_else(|| try_email(bytes, index))
-                .or_else(|| try_ssn(bytes, index))
-                .or_else(|| try_br_phone(bytes, index))
+            let found = try_phone(bytes, index)
+                .map(|end| (end, "phone"))
+                .or_else(|| try_iban(bytes, index).map(|end| (end, "iban")))
+                .or_else(|| try_email(bytes, index).map(|end| (end, "email")))
+                .or_else(|| try_ssn(bytes, index).map(|end| (end, "ssn")))
+                .or_else(|| try_br_phone(bytes, index).map(|end| (end, "phone")))
                 .or_else(|| try_id_or_card(bytes, index));
-            if let Some(end) = end {
+            if let Some((end, kind)) = found {
                 findings.push(Finding {
                     code: REASON_CODE,
                     detector: DETECTOR_NAME,
+                    kind,
                     start: index,
                     end,
                 });
@@ -120,25 +122,22 @@ fn try_email(bytes: &[u8], start: usize) -> Option<usize> {
         return None;
     }
     index += 1;
-    let mut dots = 0;
-    let mut label = 0;
     let domain_start = index;
     while index < bytes.len() && (is_domain(bytes[index]) || bytes[index] == b'.') {
-        if bytes[index] == b'.' {
-            if label == 0 {
-                return None;
-            }
-            dots += 1;
-            label = 0;
-        } else {
-            label += 1;
-        }
         index += 1;
     }
-    if dots < 1 || label < 2 || bytes[domain_start] == b'-' || bytes[index - 1] == b'.' {
-        return None;
+    // A dot right after the address ends the sentence ("ana@x.com."), it is not
+    // part of the domain. Without this the whole address went unmasked.
+    while index > domain_start && bytes[index - 1] == b'.' {
+        index -= 1;
     }
-    Some(index)
+    let domain = &bytes[domain_start..index];
+    let mut labels = domain.split(|byte| *byte == b'.');
+    let valid = domain.first() != Some(&b'-')
+        && domain.contains(&b'.')
+        && labels.clone().all(|label| !label.is_empty())
+        && labels.next_back().is_some_and(|tld| tld.len() >= 2);
+    valid.then_some(index)
 }
 
 fn try_ssn(bytes: &[u8], start: usize) -> Option<usize> {
@@ -263,7 +262,7 @@ fn try_br_phone(bytes: &[u8], start: usize) -> Option<usize> {
     Some(end)
 }
 
-fn try_id_or_card(bytes: &[u8], start: usize) -> Option<usize> {
+fn try_id_or_card(bytes: &[u8], start: usize) -> Option<(usize, &'static str)> {
     if !bytes[start].is_ascii_digit() {
         return None;
     }
@@ -272,12 +271,12 @@ fn try_id_or_card(bytes: &[u8], start: usize) -> Option<usize> {
     }
     if let Some(end) = take(bytes, start, 11) {
         if cpf_ok(&only_digits(&bytes[start..end])) {
-            return Some(end);
+            return Some((end, "cpf"));
         }
     }
     if let Some(end) = take(bytes, start, 14) {
         if cnpj_ok(&only_digits(&bytes[start..end])) {
-            return Some(end);
+            return Some((end, "cnpj"));
         }
     }
     for length in (13..=19).rev() {
@@ -294,7 +293,7 @@ fn try_id_or_card(bytes: &[u8], start: usize) -> Option<usize> {
             continue;
         }
         if luhn(&digits) {
-            return Some(end);
+            return Some((end, "card"));
         }
     }
     None
@@ -534,6 +533,43 @@ mod tests {
         ] {
             assert!(spans(text).is_empty(), "{text}");
         }
+    }
+
+    #[test]
+    fn email_at_the_end_of_a_sentence_is_still_masked() {
+        for (text, email) in [
+            ("meu e-mail é ana@example.com.", "ana@example.com"),
+            ("ana@example.com. Fim", "ana@example.com"),
+            ("ana@sub.example.com.br.", "ana@sub.example.com.br"),
+            ("ana@example.com...", "ana@example.com"),
+        ] {
+            let found = spans(text);
+            assert_eq!(found.len(), 1, "{text}");
+            assert_eq!(&text[found[0].0..found[0].1], email, "{text}");
+        }
+        for text in [
+            "ana@example.",
+            "ana@.com",
+            "ana@example..com",
+            "ana@-x.com",
+            "ana@x.c",
+        ] {
+            assert!(spans(text).is_empty(), "{text}");
+        }
+    }
+
+    #[test]
+    fn each_finding_names_the_kind_of_data() {
+        let kinds =
+            |text: &str| -> Vec<&str> { PersonalData.scan(text).iter().map(|f| f.kind).collect() };
+        assert_eq!(kinds("ana@exemplo.com"), ["email"]);
+        assert_eq!(kinds("+1 415 555 2671"), ["phone"]);
+        assert_eq!(kinds("(11) 98765-4321"), ["phone"]);
+        assert_eq!(kinds("4111 1111 1111 1111"), ["card"]);
+        assert_eq!(kinds("DE89 3704 0044 0532 0130 00"), ["iban"]);
+        assert_eq!(kinds("529.982.247-25"), ["cpf"]);
+        assert_eq!(kinds("11.222.333/0001-81"), ["cnpj"]);
+        assert_eq!(kinds("SSN 123-45-6789"), ["ssn"]);
     }
 
     #[test]

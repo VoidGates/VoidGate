@@ -1,51 +1,10 @@
-//! Python module `voidgate._voidgate`, re-exported by `voidgate/__init__.py`.
+//! Python module `voidgate._voidgate`: the scan only. Policy (what blocks,
+//! placeholders, conversations, SDK wrappers) lives in `voidgate/__init__.py`.
 //!
 //! Offsets are converted from UTF-8 bytes (Rust) to code points (Python), so
-//! `text[f.start:f.end]` is the span in Python too.
+//! `text[start:end]` is the span in Python too.
 
 use pyo3::prelude::*;
-
-/// One suspicious span. `text[start:end]` is the span; the finding never
-/// carries the text itself.
-#[pyclass(frozen, get_all, module = "voidgate")]
-#[derive(Clone)]
-struct Finding {
-    code: &'static str,
-    detector: &'static str,
-    start: usize,
-    end: usize,
-}
-
-#[pymethods]
-impl Finding {
-    fn __repr__(&self) -> String {
-        format!(
-            "Finding(code='{}', detector='{}', start={}, end={})",
-            self.code, self.detector, self.start, self.end
-        )
-    }
-}
-
-/// What a text contains and what to do with it.
-#[pyclass(frozen, get_all, module = "voidgate")]
-struct Inspection {
-    /// "allow", "mask" or "block".
-    action: &'static str,
-    findings: Vec<Finding>,
-    /// The text with personal data replaced by "[redacted]".
-    redacted: String,
-}
-
-#[pymethods]
-impl Inspection {
-    fn __repr__(&self) -> String {
-        format!(
-            "Inspection(action='{}', findings={})",
-            self.action,
-            self.findings.len()
-        )
-    }
-}
 
 /// Code-point index of each byte offset, in one pass over the text whatever
 /// the number of offsets. Counts lead bytes instead of slicing, so an offset
@@ -69,47 +28,36 @@ fn char_indexes(text: &str, offsets: &[usize]) -> Vec<usize> {
     out
 }
 
-/// Inspects `text` with every built-in detector.
+/// Every finding in `text` as `(code, detector, kind, start, end)`, ordered by
+/// offset. The GIL is released while scanning, so threads run in parallel.
 #[pyfunction]
-fn inspect(text: &str) -> Inspection {
-    let found = voidgate_core::inspect(text);
-    let redacted = voidgate_core::redact(text, &found.findings);
-    let offsets: Vec<usize> = found
-        .findings
-        .iter()
-        .flat_map(|f| [f.start, f.end])
-        .collect();
-    let indexes = char_indexes(text, &offsets);
-    let findings = found
-        .findings
-        .iter()
-        .enumerate()
-        .map(|(i, f)| Finding {
-            code: f.code,
-            detector: f.detector,
-            start: indexes[2 * i],
-            end: indexes[2 * i + 1],
-        })
-        .collect();
-    Inspection {
-        action: found.action.as_str(),
-        findings,
-        redacted,
-    }
-}
-
-/// `text` with personal data replaced by "[redacted]".
-#[pyfunction]
-fn redact(text: &str) -> String {
-    voidgate_core::redact(text, &voidgate_core::inspect(text).findings)
+fn scan(
+    py: Python<'_>,
+    text: String,
+) -> Vec<(&'static str, &'static str, &'static str, usize, usize)> {
+    py.detach(|| {
+        let findings = voidgate_core::inspect(&text).findings;
+        let offsets: Vec<usize> = findings.iter().flat_map(|f| [f.start, f.end]).collect();
+        let indexes = char_indexes(&text, &offsets);
+        findings
+            .iter()
+            .enumerate()
+            .map(|(i, f)| {
+                (
+                    f.code,
+                    f.detector,
+                    f.kind,
+                    indexes[2 * i],
+                    indexes[2 * i + 1],
+                )
+            })
+            .collect()
+    })
 }
 
 #[pymodule]
 fn _voidgate(m: &Bound<'_, PyModule>) -> PyResult<()> {
-    m.add_class::<Finding>()?;
-    m.add_class::<Inspection>()?;
-    m.add_function(wrap_pyfunction!(inspect, m)?)?;
-    m.add_function(wrap_pyfunction!(redact, m)?)?;
+    m.add_function(wrap_pyfunction!(scan, m)?)?;
     m.add("__version__", env!("CARGO_PKG_VERSION"))?;
     Ok(())
 }
